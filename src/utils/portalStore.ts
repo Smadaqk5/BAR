@@ -207,6 +207,7 @@ export const PortalStore = {
     let users = this.getAllUsers();
     users = users.filter(u => u.id !== userId);
     this.saveUsers(users);
+    this.clearSavedProfiles(userId);
 
     const currentUser = this.getCurrentUser();
     if (currentUser && currentUser.id === userId) {
@@ -373,20 +374,34 @@ export const PortalStore = {
     return order;
   },
 
-  getSavedProfiles(): SavedClientProfile[] {
+  getSavedProfiles(userId?: string): SavedClientProfile[] {
     try {
-      const raw = localStorage.getItem(PROFILES_KEY);
+      const targetUserId = userId || this.getCurrentUser()?.id;
+      if (!targetUserId) return [];
+      const raw = localStorage.getItem(`${PROFILES_KEY}_${targetUserId}`);
       return raw ? JSON.parse(raw) : [];
     } catch {
       return [];
     }
   },
 
-  saveSavedProfiles(profiles: SavedClientProfile[]): void {
+  saveSavedProfiles(profiles: SavedClientProfile[], userId?: string): void {
     try {
-      localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
+      const targetUserId = userId || this.getCurrentUser()?.id;
+      if (!targetUserId) return;
+      localStorage.setItem(`${PROFILES_KEY}_${targetUserId}`, JSON.stringify(profiles));
     } catch (e) {
       console.warn('Failed to save profiles to localStorage:', e);
+    }
+  },
+
+  clearSavedProfiles(userId?: string): void {
+    try {
+      const targetUserId = userId || this.getCurrentUser()?.id;
+      if (!targetUserId) return;
+      localStorage.removeItem(`${PROFILES_KEY}_${targetUserId}`);
+    } catch (e) {
+      console.warn('Failed to clear profiles from localStorage:', e);
     }
   }
 };

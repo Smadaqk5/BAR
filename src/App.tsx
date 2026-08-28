@@ -34,7 +34,7 @@ import {
   FolderDown,
   ArrowRight
 } from 'lucide-react';
-import { AAMVAData, FieldHelp, User as UserType } from './types';
+import { AAMVAData, FieldHelp, User as UserType, SavedClientProfile } from './types';
 import { 
   US_STATES, 
   CAN_PROVINCES, 
@@ -72,17 +72,6 @@ import {
 
 type BarcodeBackgroundMode = 'transparent' | 'white';
 
-interface SavedClientProfile {
-  id: string;
-  title: string;
-  jurisdiction: string;
-  dln: string;
-  createdAt: string;
-  data: AAMVAData;
-  barcodeString?: string;
-  imageUrl?: string;
-}
-
 export default function App() {
   // Authentication & Session State
   const [currentUser, setCurrentUser] = useState<UserType | null>(() => PortalStore.getCurrentUser());
@@ -111,13 +100,26 @@ export default function App() {
   const [backgroundMode, setBackgroundMode] = useState<BarcodeBackgroundMode>('white');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Client Portal Saved Profiles (Starts completely empty)
-  const [savedProfiles, setSavedProfiles] = useState<SavedClientProfile[]>(() => PortalStore.getSavedProfiles());
+  // User-scoped Saved Profiles & Generated Barcodes (Strictly private per account)
+  const [savedProfiles, setSavedProfiles] = useState<SavedClientProfile[]>(() => 
+    PortalStore.getSavedProfiles(currentUser?.id)
+  );
 
-  // Automatically persist saved profiles whenever they change
+  // Synchronize saved profiles whenever active user switches (e.g. login/logout/account switch)
   useEffect(() => {
-    PortalStore.saveSavedProfiles(savedProfiles);
-  }, [savedProfiles]);
+    if (currentUser?.id) {
+      setSavedProfiles(PortalStore.getSavedProfiles(currentUser.id));
+    } else {
+      setSavedProfiles([]);
+    }
+  }, [currentUser?.id]);
+
+  // Automatically persist saved profiles for the active user account
+  useEffect(() => {
+    if (currentUser?.id) {
+      PortalStore.saveSavedProfiles(savedProfiles, currentUser.id);
+    }
+  }, [savedProfiles, currentUser?.id]);
 
   // Refs
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -378,9 +380,10 @@ export default function App() {
   };
 
   const handleGenerateDCF = () => {
-    const dcf = generateSingleDCF();
+    const state = formData.daj || 'CA';
+    const dcf = generateSingleDCF(state);
     setFormData(prev => ({ ...prev, dcf: dcf }));
-    setToastMessage(`⚡ Generated Document Discriminator (DCF): ${dcf}`);
+    setToastMessage(`⚡ Generated Document Discriminator (DCF) for ${state}: ${dcf}`);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
@@ -418,7 +421,7 @@ export default function App() {
     const dob = formData.dbb || generateSingleDOB();
     const issueDate = generateSingleIssueDate(dob, state);
     const expDate = generateSingleExpiryDate(dob, issueDate, state);
-    const dcf = generateSingleDCF();
+    const dcf = generateSingleDCF(state);
     const icn = generateSingleICN(state);
     const dck = Math.floor(1000000000 + Math.random() * 9000000000).toString();
 
@@ -444,6 +447,7 @@ export default function App() {
     const name = `${formData.dac || 'CARDHOLDER'} ${formData.dcs || 'RECORD'}`;
     const newProfile: SavedClientProfile = {
       id: `profile-${Date.now()}`,
+      userId: currentUser?.id,
       title: `${name} — ${state} (${formData.daq || 'No DLN'})`,
       jurisdiction: state,
       dln: formData.daq || 'N/A',
@@ -507,6 +511,7 @@ export default function App() {
 
         const newProfile: SavedClientProfile = {
           id: `gen-${Date.now()}`,
+          userId: currentUser.id,
           title: `${cardholderName || 'CARDHOLDER'} — ${state} (${formData.daq || 'No DLN'})`,
           jurisdiction: state,
           dln: formData.daq || 'N/A',
@@ -1577,9 +1582,12 @@ export default function App() {
                 {savedProfiles.length > 0 && (
                   <button
                     onClick={() => {
-                      if (confirm('Clear all profiles?')) {
+                      if (confirm('Clear all your saved profiles?')) {
                         setSavedProfiles([]);
-                        setToastMessage('Cleared all profiles');
+                        if (currentUser?.id) {
+                          PortalStore.clearSavedProfiles(currentUser.id);
+                        }
+                        setToastMessage('Cleared your saved profiles');
                         setTimeout(() => setToastMessage(null), 2500);
                       }
                     }}

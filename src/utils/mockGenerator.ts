@@ -275,31 +275,86 @@ const FIRST_NAMES_MALE = [
   'JAMES', 'ROBERT', 'JOHN', 'MICHAEL', 'DAVID', 'WILLIAM', 'RICHARD', 'JOSEPH',
   'THOMAS', 'CHARLES', 'CHRISTOPHER', 'DANIEL', 'MATTHEW', 'ANTHONY', 'MARK',
   'DONALD', 'STEVEN', 'ANDREW', 'PAUL', 'JOSHUA', 'KENNETH', 'KEVIN', 'BRIAN',
-  'GEORGE', 'TIMOTHY', 'RONALD', 'JASON', 'EDWARD', 'JEFFREY', 'RYAN', 'JACOB'
+  'GEORGE', 'TIMOTHY', 'RONALD', 'JASON', 'EDWARD', 'JEFFREY', 'RYAN', 'JACOB',
+  'GARY', 'NICHOLAS', 'ERIC', 'JONATHAN', 'STEPHEN', 'LARRY', 'JUSTIN', 'SCOTT',
+  'BRANDON', 'BENJAMIN', 'SAMUEL', 'GREGORY', 'ALEXANDER', 'PATRICK', 'FRANK',
+  'RAYMOND', 'JACK', 'DENNIS', 'JERRY', 'TYLER', 'AARON', 'JOSE', 'ADAM', 'NATHAN',
+  'HENRY', 'DOUGLAS', 'ZACHARY', 'PETER', 'KYLE', 'WALTER', 'ETHAN', 'JEREMY',
+  'HAROLD', 'KEITH', 'CHRISTIAN', 'ROGER', 'NOAH', 'GERALD', 'ETHAN', 'ARTHUR',
+  'TERRY', 'SEAN', 'AUSTIN', 'CARL', 'LAWRENCE', 'JESSE', 'DYLAN', 'BRYAN', 'JOE',
+  'JORDAN', 'BILLY', 'ALBERT', 'GABRIEL', 'LOGAN', 'BRUCE', 'ALAN', 'JUAN', 'WAYNE',
+  'ELIJAH', 'RANDY', 'ROY', 'VINCENT', 'RALPH', 'EUGENE', 'RUSSELL', 'BOBBY', 'MASON',
+  'PHILIP', 'LOUIS', 'LUCAS', 'ADRIAN', 'JULIAN', 'MARCUS', 'THEODORE', 'ISAAC', 'LEONARD'
 ];
 
 const FIRST_NAMES_FEMALE = [
   'MARY', 'PATRICIA', 'JENNIFER', 'LINDA', 'ELIZABETH', 'BARBARA', 'SUSAN',
   'JESSICA', 'SARAH', 'KAREN', 'LISA', 'NANCY', 'BETTY', 'MARGARET', 'SANDRA',
-  'ASHLEY', 'KIMBERLY', 'EMILY', 'DONNA', 'MICHELLE', 'CAROL', 'AMANDA', 'MELISSA'
+  'ASHLEY', 'KIMBERLY', 'EMILY', 'DONNA', 'MICHELLE', 'CAROL', 'AMANDA', 'MELISSA',
+  'DEBORAH', 'STEPHANIE', 'REBECCA', 'SHARON', 'LAURA', 'CYNTHIA', 'KATHLEEN',
+  'AMY', 'ANGELA', 'SHIRLEY', 'ANNA', 'BRENDA', 'PAMELA', 'EMMA', 'NICOLE', 'HELEN',
+  'SAMANTHA', 'KATHERINE', 'CHRISTINE', 'DEBRA', 'RACHEL', 'CAROLYN', 'JANET',
+  'CATHERINE', 'MARIA', 'HEATHER', 'DIANE', 'OLIVIA', 'JULIE', 'JOYCE', 'VICTORIA',
+  'KELLY', 'CHRISTINA', 'LAUREN', 'JOAN', 'EVELYN', 'JUDITH', 'MEGAN', 'CHERYL',
+  'ANDREA', 'HANNAH', 'MARTHA', 'JACQUELINE', 'FRANCES', 'GLORIA', 'ANN', 'TERESA',
+  'KATHRYN', 'SARA', 'JANICE', 'JEAN', 'ALICE', 'MADISON', 'DORIS', 'ABIGAIL',
+  'JULIA', 'JUDY', 'GRACE', 'DENISE', 'AMBER', 'MARILYN', 'BEVERLY', 'DANIELLE',
+  'THERESA', 'SOPHIA', 'MARIE', 'DIANA', 'BRITTANY', 'NATALIE', 'ISABELLA', 'CHARLOTTE'
 ];
 
 const LAST_NAMES = [
   'SMITH', 'JOHNSON', 'WILLIAMS', 'BROWN', 'JONES', 'GARCIA', 'MILLER', 'DAVIS',
   'RODRIGUEZ', 'MARTINEZ', 'HERNANDEZ', 'LOPEZ', 'GONZALEZ', 'WILSON', 'ANDERSON',
   'THOMAS', 'TAYLOR', 'MOORE', 'JACKSON', 'MARTIN', 'LEE', 'PEREZ', 'THOMPSON',
-  'WHITE', 'HARRIS', 'SANCHEZ', 'CLARK', 'RAMIREZ', 'LEWIS', 'ROBINSON', 'WALKER'
+  'WHITE', 'HARRIS', 'SANCHEZ', 'CLARK', 'RAMIREZ', 'LEWIS', 'ROBINSON', 'WALKER',
+  'YOUNG', 'ALLEN', 'KING', 'WRIGHT', 'SCOTT', 'TORRES', 'NGUYEN', 'HILL', 'FLORES',
+  'GREEN', 'ADAMS', 'NELSON', 'BAKER', 'HALL', 'RIVERA', 'CAMPBELL', 'MITCHELL',
+  'CARTER', 'ROBERTS', 'GOMEZ', 'PHILLIPS', 'EVANS', 'TURNER', 'DIAZ', 'PARKER',
+  'CRUZ', 'EDWARDS', 'COLLINS', 'REYES', 'STEWART', 'MORRIS', 'MORALES', 'MURPHY',
+  'COOK', 'ROGERS', 'GUTIERREZ', 'ORTIZ', 'MORGAN', 'COOPER', 'PETERSON', 'BAILEY',
+  'REED', 'KELLY', 'HOWARD', 'RAMOS', 'KIM', 'COX', 'WARD', 'RICHARDSON', 'WATSON',
+  'BROOKS', 'CHAVEZ', 'WOOD', 'JAMES', 'BENNETT', 'GRAY', 'MENDOZA', 'RUIZ', 'HUGHES',
+  'PRICE', 'ALVAREZ', 'CASTILLO', 'SANDERS', 'PATEL', 'MYERS', 'LONG', 'ROSS', 'FOSTER',
+  'JIMENEZ', 'POWELL', 'JENKINS', 'PERRY', 'RUSSELL', 'SULLIVAN', 'BELL', 'COLEMAN',
+  'BUTLER', 'HENDERSON', 'BARNES', 'GONZALES', 'FISHER', 'VASQUEZ', 'SIMMONS', 'ROMERO',
+  'JORDAN', 'PATTERSON', 'ALEXANDER', 'HAMILTON', 'GRAHAM', 'REYNOLDS', 'GRIFFIN',
+  'WALLACE', 'MORENO', 'WEST', 'COLE', 'HAYES', 'BRYANT', 'HERRERA', 'GIBSON', 'ELLIS',
+  'TRAN', 'MEDINA', 'AGUILAR', 'STEVENS', 'MURRAY', 'FORD', 'CASTRO', 'MARSHALL',
+  'OWENS', 'HARRISON', 'FERNANDEZ', 'MCDONALD', 'WOODS', 'WASHINGTON', 'KENNEDY',
+  'WELLS', 'VARGAS', 'HENRY', 'CHEN', 'FREEMAN', 'WEBB', 'TUCKER', 'GUZMAN', 'BURNS',
+  'CRAWFORD', 'OLSON', 'SIMPSON', 'PORTER', 'HUNTER', 'GORDON', 'MENDEZ', 'SILVA',
+  'SHAW', 'SNYDER', 'MASON', 'DIXON', 'MUÑOZ', 'BOWMAN', 'MENDEZ', 'BISHOP', 'BOYD'
 ];
 
 const STREET_NAMES = [
   'MAIN ST', 'OAK AVE', 'MAPLE DR', 'CEDAR LN', 'WASHINGTON BLVD', 'LINCOLN WAY',
   'PINE ST', 'ELM ST', 'PARK AVE', 'LAKE RD', 'RIDGE WAY', 'SUNSET DR', 'BROADWAY',
-  'HIGHLAND AVE', 'VALLEY VIEW RD', 'MEADOW LN', 'COLLEGE AVE', 'SPRING ST'
+  'HIGHLAND AVE', 'VALLEY VIEW RD', 'MEADOW LN', 'COLLEGE AVE', 'SPRING ST',
+  'CHESTNUT ST', 'WALNUT ST', 'RIVER RD', 'CYPRESS AVE', 'WILLOW CREEK DR',
+  'MAGNOLIA ST', 'BEACON ST', 'CENTRAL AVE', 'COMMERCE WAY', 'MISSION BLVD',
+  'COLONIAL DR', 'HERITAGE WAY', 'FOREST HILLS DR', 'SUMMIT AVE', 'CROSSROADS BLVD',
+  'LIBERTY WAY', 'VALLEY OAK DR', 'PEACHTREE ST', 'SHORELINE DR', 'SYCAMORE ST',
+  'CRESTVIEW TER', 'TIMBERLINE DR', 'ORCHARD RD', 'FRANKLIN ST', 'STATE ST',
+  'VILLAGE GREEN WAY', 'FAIRVIEW AVE', 'GRAND AVE', 'LAKESIDE DR', 'SKYLINE BLVD'
 ];
 
 const EYE_COLORS = ['BRO', 'BLU', 'GRN', 'HAZ', 'GRY', 'BLK'];
 const HAIR_COLORS = ['BRO', 'BLK', 'BLN', 'RED', 'GRY', 'WHI'];
 const RACE_CODES = ['W', 'B', 'A', 'H', 'I', 'U'];
+
+// ==============================================================================
+// HIGH-ENTROPY DE-DUPLICATION REGISTRY (Prevents collisions over 100,000+ items)
+// ==============================================================================
+const generatedDlnRegistry = new Set<string>();
+const generatedDcfRegistry = new Set<string>();
+const generatedDcgRegistry = new Set<string>();
+
+function sanitizeRegistry(set: Set<string>, maxSize = 100000): void {
+  if (set.size > maxSize) {
+    const arr = Array.from(set);
+    arr.slice(0, 20000).forEach(item => set.delete(item));
+  }
+}
 
 function randomChoice<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -311,16 +366,33 @@ function randomInt(min: number, max: number): number {
 
 function randomDigits(length: number): string {
   let res = '';
-  for (let i = 0; i < length; i++) {
-    res += Math.floor(Math.random() * 10).toString();
+  // Cryptographically stronger seed mixing
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    for (let i = 0; i < length; i++) {
+      res += (bytes[i] % 10).toString();
+    }
+  } else {
+    for (let i = 0; i < length; i++) {
+      res += Math.floor(Math.random() * 10).toString();
+    }
   }
   return res;
 }
 
 function randomChars(length: number, charset = 'ABCDEFGHJKLMNPRSTUVWXYZ'): string {
   let res = '';
-  for (let i = 0; i < length; i++) {
-    res += charset.charAt(Math.floor(Math.random() * charset.length));
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    for (let i = 0; i < length; i++) {
+      res += charset.charAt(bytes[i] % charset.length);
+    }
+  } else {
+    for (let i = 0; i < length; i++) {
+      res += charset.charAt(Math.floor(Math.random() * charset.length));
+    }
   }
   return res;
 }
@@ -329,78 +401,66 @@ export function generateStateDLN(stateCode: string): string {
   const code = stateCode.toUpperCase();
   const letters = 'ABCDEFGHJKLMNPRSTUVWXYZ';
 
-  if (['AL', 'DE', 'DC', 'ME', 'OR', 'RI', 'AK'].includes(code)) {
-    return randomDigits(7);
-  }
-  if (['AR', 'CO', 'CT', 'GA', 'IA', 'MS', 'NM', 'SC', 'UT', 'WY'].includes(code)) {
-    return randomDigits(9);
-  }
-  if (['IN', 'NV', 'NC'].includes(code)) {
-    return randomDigits(10);
-  }
-  if (['PA', 'TX', 'VT', 'SD', 'TN'].includes(code)) {
-    return randomDigits(8);
-  }
-  if (code === 'LA') {
-    return `00${randomDigits(7)}`;
-  }
-  if (code === 'CA') {
-    return `${randomChars(1, letters)}${randomDigits(7)}`;
-  }
-  if (['AZ', 'KY', 'MT', 'NE', 'VA'].includes(code)) {
-    return `${randomChars(1, letters)}${randomDigits(8)}`;
-  }
-  if (code === 'HI') {
-    return `H${randomDigits(8)}`;
-  }
-  if (code === 'KS') {
-    return `K${randomDigits(8)}`;
-  }
-  if (code === 'MA') {
-    return `S${randomDigits(8)}`;
-  }
-  if (code === 'MO') {
-    return `${randomChars(1, letters)}${randomDigits(9)}`;
-  }
-  if (code === 'IL') {
-    return `${randomChars(1, letters)}${randomDigits(11)}`;
-  }
-  if (['FL', 'MD', 'MI', 'MN'].includes(code)) {
-    return `${randomChars(1, letters)}${randomDigits(12)}`;
-  }
-  if (code === 'NJ') {
-    return `${randomChars(1, letters)}${randomDigits(14)}`;
-  }
-  if (code === 'WI') {
-    return `${randomChars(1, letters)}${randomDigits(13)}`;
-  }
-  if (code === 'WV') {
-    return `${randomChars(1, letters)}${randomDigits(6)}`;
-  }
-  if (code === 'NY') {
-    return `${randomChars(1, letters)}${randomDigits(7)}`;
-  }
-  if (code === 'OK') {
-    return `${randomChars(1, letters)}${randomDigits(9)}`;
-  }
-  if (code === 'OH') {
-    return `${randomChars(2, letters)}${randomDigits(6)}`;
-  }
-  if (code === 'ND') {
-    return `${randomChars(3, letters)}${randomDigits(6)}`;
-  }
-  if (code === 'ID') {
-    return `${randomChars(2, letters)}${randomDigits(6)}${randomChars(1, letters)}`;
-  }
-  if (code === 'NH') {
-    return `${randomDigits(2)}${randomChars(3, letters)}${randomDigits(5)}`;
-  }
-  if (code === 'WA') {
-    const alphanumeric = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
-    return `WDL${randomChars(9, alphanumeric)}`;
-  }
+  let candidate = '';
+  let attempts = 0;
 
-  return randomDigits(8);
+  do {
+    attempts++;
+    if (['AL', 'DE', 'DC', 'ME', 'OR', 'RI', 'AK'].includes(code)) {
+      candidate = randomDigits(7);
+    } else if (['AR', 'CO', 'CT', 'GA', 'IA', 'MS', 'NM', 'SC', 'UT', 'WY'].includes(code)) {
+      candidate = randomDigits(9);
+    } else if (['IN', 'NV', 'NC'].includes(code)) {
+      candidate = randomDigits(10);
+    } else if (['PA', 'TX', 'VT', 'SD', 'TN'].includes(code)) {
+      candidate = randomDigits(8);
+    } else if (code === 'LA') {
+      candidate = `00${randomDigits(7)}`;
+    } else if (code === 'CA') {
+      candidate = `${randomChars(1, letters)}${randomDigits(7)}`;
+    } else if (['AZ', 'KY', 'MT', 'NE', 'VA'].includes(code)) {
+      candidate = `${randomChars(1, letters)}${randomDigits(8)}`;
+    } else if (code === 'HI') {
+      candidate = `H${randomDigits(8)}`;
+    } else if (code === 'KS') {
+      candidate = `K${randomDigits(8)}`;
+    } else if (code === 'MA') {
+      candidate = `S${randomDigits(8)}`;
+    } else if (code === 'MO') {
+      candidate = `${randomChars(1, letters)}${randomDigits(9)}`;
+    } else if (code === 'IL') {
+      candidate = `${randomChars(1, letters)}${randomDigits(11)}`;
+    } else if (['FL', 'MD', 'MI', 'MN'].includes(code)) {
+      candidate = `${randomChars(1, letters)}${randomDigits(12)}`;
+    } else if (code === 'NJ') {
+      candidate = `${randomChars(1, letters)}${randomDigits(14)}`;
+    } else if (code === 'WI') {
+      candidate = `${randomChars(1, letters)}${randomDigits(13)}`;
+    } else if (code === 'WV') {
+      candidate = `${randomChars(1, letters)}${randomDigits(6)}`;
+    } else if (code === 'NY') {
+      candidate = `${randomChars(1, letters)}${randomDigits(7)}`;
+    } else if (code === 'OK') {
+      candidate = `${randomChars(1, letters)}${randomDigits(9)}`;
+    } else if (code === 'OH') {
+      candidate = `${randomChars(2, letters)}${randomDigits(6)}`;
+    } else if (code === 'ND') {
+      candidate = `${randomChars(3, letters)}${randomDigits(6)}`;
+    } else if (code === 'ID') {
+      candidate = `${randomChars(2, letters)}${randomDigits(6)}${randomChars(1, letters)}`;
+    } else if (code === 'NH') {
+      candidate = `${randomDigits(2)}${randomChars(3, letters)}${randomDigits(5)}`;
+    } else if (code === 'WA') {
+      const alphanumeric = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
+      candidate = `WDL${randomChars(9, alphanumeric)}`;
+    } else {
+      candidate = randomDigits(8);
+    }
+  } while (generatedDlnRegistry.has(`${code}:${candidate}`) && attempts < 100);
+
+  sanitizeRegistry(generatedDlnRegistry);
+  generatedDlnRegistry.add(`${code}:${candidate}`);
+  return candidate;
 }
 
 export function generateAAMVADates(
@@ -690,13 +750,55 @@ export function generateSingleExpiryDate(
 
 export function generateSingleICN(stateCode?: string): string {
   const code = (stateCode && JURISDICTION_RULES[stateCode.toUpperCase()]) ? stateCode.toUpperCase() : 'CA';
-  const year = new Date().getFullYear();
-  return `${code}${year}${randomDigits(7)}`;
+  const now = new Date();
+  const year = now.getFullYear().toString().slice(-2);
+  const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 1000 / 60 / 60 / 24)
+    .toString()
+    .padStart(3, '0');
+
+  let candidate = '';
+  let attempts = 0;
+  do {
+    attempts++;
+    const micro = randomDigits(6);
+    candidate = `${code}${year}${dayOfYear}${micro}`;
+  } while (generatedDcgRegistry.has(candidate) && attempts < 100);
+
+  sanitizeRegistry(generatedDcgRegistry);
+  generatedDcgRegistry.add(candidate);
+  return candidate;
 }
 
-export function generateSingleDCF(): string {
+export function generateSingleDCF(stateCode?: string): string {
+  const code = (stateCode && JURISDICTION_RULES[stateCode.toUpperCase()]) ? stateCode.toUpperCase() : 'CA';
   const year = new Date().getFullYear();
-  return `${randomDigits(8)}${year}${randomChars(6, '0123456789ABCDEF')}`;
+  const hex = '0123456789ABCDEF';
+
+  let candidate = '';
+  let attempts = 0;
+
+  do {
+    attempts++;
+    if (code === 'FL') {
+      candidate = `${randomDigits(4)}${year}${randomDigits(5)}`;
+    } else if (code === 'TX') {
+      candidate = `${randomDigits(8)}${year}${randomDigits(8)}`;
+    } else if (code === 'CA') {
+      candidate = `${randomChars(2, '0123456789ABCDEF')}${randomDigits(6)}${year}${randomChars(4, hex)}`;
+    } else if (code === 'NY') {
+      candidate = `${randomDigits(8)}`;
+    } else if (code === 'PA') {
+      candidate = `${randomDigits(16)}`;
+    } else if (code === 'WA') {
+      candidate = `W${randomDigits(7)}${year}${randomChars(4, hex)}`;
+    } else {
+      candidate = `${randomDigits(6)}${year}${randomChars(8, hex)}`;
+    }
+  } while (generatedDcfRegistry.has(candidate) && attempts < 100);
+
+  sanitizeRegistry(generatedDcfRegistry);
+  generatedDcfRegistry.add(candidate);
+  return candidate;
 }
 
 export function generateSingleAddress(stateCode?: string): { dag: string; dai: string; dak: string; daj: string } {

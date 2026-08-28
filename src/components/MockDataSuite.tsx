@@ -252,11 +252,35 @@ from typing import Any, Dict, List, Optional, Tuple
                       <input
                         type="number"
                         min={1}
-                        max={50}
+                        max={200}
                         value={recordsPerState}
-                        onChange={e => setRecordsPerState(Math.max(1, Math.min(50, parseInt(e.target.value, 10) || 1)))}
+                        onChange={e => setRecordsPerState(Math.max(1, Math.min(200, parseInt(e.target.value, 10) || 1)))}
                         className="w-16 bg-[#FAF7EC] border border-[#0B2519]/25 rounded px-2 py-1 text-xs font-mono font-bold text-center outline-none focus:border-[#FF5C00]"
                       />
+                    </div>
+
+                    {/* Quick Preset Buttons */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] font-bold text-[#0B2519]/60 mr-1">Presets:</span>
+                      {[
+                        { label: '50', rps: 1 },
+                        { label: '500', rps: 10 },
+                        { label: '1,000', rps: 20 },
+                        { label: '5,000', rps: 100 },
+                        { label: '10,000', rps: 200 }
+                      ].map(preset => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => {
+                            setSelectedStates([...allStateCodes]);
+                            setRecordsPerState(preset.rps);
+                          }}
+                          className="px-2 py-0.5 text-[10px] font-mono font-bold bg-[#EFECE0] hover:bg-[#E2DEC2] text-[#061E13] rounded border border-[#0B2519]/20 transition cursor-pointer"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -278,7 +302,7 @@ from typing import Any, Dict, List, Optional, Tuple
                       className="px-4 py-2 bg-[#FF5C00] hover:bg-[#FF731E] text-white text-xs font-extrabold uppercase tracking-wider rounded-lg shadow-sm transition flex items-center gap-2 cursor-pointer active:scale-95"
                     >
                       <Sparkles className="h-4 w-4 animate-pulse" />
-                      <span>Generate Dataset ({selectedStates.length * recordsPerState} Records)</span>
+                      <span>Generate ({selectedStates.length * recordsPerState} Non-Repeating Records)</span>
                     </button>
                   </div>
                 </div>
