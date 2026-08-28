@@ -1,7 +1,10 @@
 import { TronVerifyResult } from '../types';
 
-export const DEFAULT_TRON_DEPOSIT_ADDRESS = 'TYDzsYUE29eAQfMnA7WPZcaK5f46zMPwnT';
-export const OFFICIAL_TRON_USDT_CONTRACT = 'TR7NHqjekKQxGTCi8q8ZY4pL8otSzgjLj6';
+const envDepositAddress = (import.meta as any).env?.VITE_TRON_DEPOSIT_ADDRESS;
+const envUsdtContract = (import.meta as any).env?.VITE_TRON_USDT_CONTRACT;
+
+export const DEFAULT_TRON_DEPOSIT_ADDRESS = envDepositAddress?.trim() || 'TYDzsYUE29eAQfMnA7WPZcaK5f46zMPwnT';
+export const OFFICIAL_TRON_USDT_CONTRACT = envUsdtContract?.trim() || 'TR7NHqjekKQxGTCi8q8ZY4pL8otSzgjLj6';
 export const ALTERNATE_TRON_USDT_CONTRACT = '3Z53w9LDwYf3aYruqAiVpMURFwPMR9jYVGvjbubE9WaM';
 
 /**
