@@ -15,9 +15,26 @@ import {
   Tag, 
   FileCode, 
   Info,
-  HelpCircle
+  HelpCircle,
+  Database,
+  Dices,
+  Terminal,
+  Code2,
+  X,
+  Wand2,
+  ShieldCheck,
+  Building2,
+  Bookmark,
+  Layers,
+  CalendarDays,
+  Hash,
+  Fingerprint,
+  RotateCcw,
+  SlidersHorizontal,
+  FolderDown,
+  ArrowRight
 } from 'lucide-react';
-import { AAMVAData, FieldHelp } from './types';
+import { AAMVAData, FieldHelp, User as UserType } from './types';
 import { 
   US_STATES, 
   CAN_PROVINCES, 
@@ -34,10 +51,44 @@ import {
 } from './constants';
 import { compileAAMVAString, getReadableAAMVAString } from './utils/aamvaCompiler';
 import { FormSection, TextInput, SelectInput } from './components/FormFields';
+import { MockDataSuite } from './components/MockDataSuite';
+import { AuthScreen } from './components/AuthScreen';
+import { Trc20Checkout } from './components/Trc20Checkout';
+import { AdminOrders } from './components/AdminOrders';
+import { PortalStore } from './utils/portalStore';
+import { Coins, LogOut, ShieldAlert, PlusCircle } from 'lucide-react';
+import { 
+  generateSyntheticRecord, 
+  generateSingleDLN,
+  generateSingleDOB,
+  generateSingleIssueDate,
+  generateSingleExpiryDate,
+  generateSingleICN,
+  generateSingleDCF,
+  generateSingleAddress,
+  generateSingleName,
+  JURISDICTION_RULES 
+} from './utils/mockGenerator';
 
 type BarcodeBackgroundMode = 'transparent' | 'white';
 
+interface SavedClientProfile {
+  id: string;
+  title: string;
+  jurisdiction: string;
+  dln: string;
+  createdAt: string;
+  data: AAMVAData;
+  barcodeString?: string;
+  imageUrl?: string;
+}
+
 export default function App() {
+  // Authentication & Session State
+  const [currentUser, setCurrentUser] = useState<UserType | null>(() => PortalStore.getCurrentUser());
+  const [viewMode, setViewMode] = useState<'client' | 'admin'>('client');
+  const [showCheckoutModal, setShowCheckoutModal] = useState<boolean>(false);
+
   // Form State
   const [formData, setFormData] = useState<AAMVAData>(DEFAULT_ALASKA_DEMO);
   
@@ -46,7 +97,7 @@ export default function App() {
   const [heightFeet, setHeightFeet] = useState<number>(6);
   const [heightInches, setHeightInches] = useState<number>(0);
 
-  // Active help guide state
+  // Active help guide state (optional tracking)
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   // Output State
@@ -55,19 +106,29 @@ export default function App() {
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isImageCopied, setIsImageCopied] = useState<boolean>(false);
   const [showOutputModal, setShowOutputModal] = useState<boolean>(false);
+  const [showSavedProfilesDrawer, setShowSavedProfilesDrawer] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string>('');
   const [backgroundMode, setBackgroundMode] = useState<BarcodeBackgroundMode>('white');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Client Portal Saved Profiles (Starts completely empty)
+  const [savedProfiles, setSavedProfiles] = useState<SavedClientProfile[]>(() => PortalStore.getSavedProfiles());
+
+  // Automatically persist saved profiles whenever they change
+  useEffect(() => {
+    PortalStore.saveSavedProfiles(savedProfiles);
+  }, [savedProfiles]);
 
   // Refs
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const createFixedSizeBarcodeCanvas = (sourceCanvas: HTMLCanvasElement, mode: BarcodeBackgroundMode): HTMLCanvasElement => {
     const finalCanvas = document.createElement('canvas');
-    finalCanvas.width = 2470;
-    finalCanvas.height = 490;
+    finalCanvas.width = sourceCanvas.width;
+    finalCanvas.height = sourceCanvas.height;
     const ctx = finalCanvas.getContext('2d');
     if (!ctx) {
-      return finalCanvas;
+      return sourceCanvas;
     }
 
     if (mode === 'white') {
@@ -77,17 +138,8 @@ export default function App() {
       ctx.clearRect(0, 0, finalCanvas.width, finalCanvas.height);
     }
 
-    const innerWidth = finalCanvas.width - 4;
-    const innerHeight = finalCanvas.height - 4;
-    const scale = Math.min(innerWidth / sourceCanvas.width, innerHeight / sourceCanvas.height, 1);
-    const drawWidth = Math.round(sourceCanvas.width * scale);
-    const drawHeight = Math.round(sourceCanvas.height * scale);
-    const offsetX = Math.round((finalCanvas.width - drawWidth) / 2);
-    const offsetY = Math.round((finalCanvas.height - drawHeight) / 2);
-
     ctx.imageSmoothingEnabled = false;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, offsetX, offsetY, drawWidth, drawHeight);
+    ctx.drawImage(sourceCanvas, 0, 0);
     return finalCanvas;
   };
 
@@ -242,6 +294,165 @@ export default function App() {
     // Clear generation preview if loading a new demo
     setPreviewImageUrl('');
     setShowOutputModal(false);
+    setToastMessage('Loaded Rodgers Alaska Demo');
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Load synthetic record directly into form and auto-render
+  const handleLoadSyntheticRecord = (record: AAMVAData, notifyText?: string) => {
+    setFormData(record);
+    // Parse DAU height (e.g. 509 -> 5'9", 601 -> 6'1")
+    if (record.dau && record.dau.length >= 3) {
+      const feet = parseInt(record.dau.slice(0, 1), 10) || 5;
+      const inches = parseInt(record.dau.slice(1), 10) || 0;
+      setHeightFeet(feet);
+      setHeightInches(inches);
+    }
+    setFocusedField(null);
+    setValidationError('');
+
+    // Re-compile AAMVA string & live barcode
+    try {
+      const compiled = compileAAMVAString(record);
+      setGeneratedString(compiled);
+      if (canvasRef.current) {
+        renderBarcode(compiled, false);
+      }
+    } catch (e) {
+      console.warn('Auto compile warning on mock load:', e);
+    }
+
+    const stateName = JURISDICTION_RULES[record.daj]?.name || record.daj;
+    const msg = notifyText || `🎲 Loaded Synthetic ${stateName} (${record.daj}) Record — DLN: ${record.daq}`;
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(prev => (prev === msg ? null : prev));
+    }, 4500);
+  };
+
+  const handleRollSyntheticProfile = (stateCode?: string) => {
+    const synthetic = generateSyntheticRecord(stateCode, 'MMDDYYYY');
+    handleLoadSyntheticRecord(synthetic);
+  };
+
+  // --------------------------------------------------------------------------
+  // DIRECT 1-CLICK FIELD GENERATORS (Client Portal Automation)
+  // --------------------------------------------------------------------------
+
+  const handleGenerateDLN = () => {
+    const state = formData.daj || 'CA';
+    const dln = generateSingleDLN(state);
+    setFormData(prev => ({ ...prev, daq: dln }));
+    setToastMessage(`⚡ Generated valid ${state} License Number (DAQ): ${dln}`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleGenerateIssueDate = () => {
+    const issueDate = generateSingleIssueDate(formData.dbb, formData.daj);
+    setFormData(prev => ({ ...prev, dbd: issueDate }));
+    setToastMessage(`⚡ Generated chronological Issue Date (DBD): ${issueDate}`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleGenerateExpiryDate = () => {
+    const expDate = generateSingleExpiryDate(formData.dbb, formData.dbd, formData.daj);
+    setFormData(prev => ({ ...prev, dba: expDate }));
+    setToastMessage(`⚡ Generated Expiry Date (DBA) aligned to ${formData.daj || 'State'} renewal cycle: ${expDate}`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleGenerateDOB = () => {
+    const dob = generateSingleDOB();
+    setFormData(prev => ({ ...prev, dbb: dob }));
+    setToastMessage(`⚡ Generated adult Date of Birth (DBB): ${dob}`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleGenerateICN = () => {
+    const state = formData.daj || 'CA';
+    const icn = generateSingleICN(state);
+    const dck = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+    setFormData(prev => ({ ...prev, dcg: icn, dck: dck }));
+    setToastMessage(`⚡ Generated ICN & Inventory Control (DCG/DCK): ${icn}`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleGenerateDCF = () => {
+    const dcf = generateSingleDCF();
+    setFormData(prev => ({ ...prev, dcf: dcf }));
+    setToastMessage(`⚡ Generated Document Discriminator (DCF): ${dcf}`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleGenerateAddress = () => {
+    const state = formData.daj || 'CA';
+    const addr = generateSingleAddress(state);
+    setFormData(prev => ({
+      ...prev,
+      dag: addr.dag,
+      dai: addr.dai,
+      dak: addr.dak,
+      daj: addr.daj,
+      iin: IIN_MAPPING[addr.daj] || prev.iin
+    }));
+    setToastMessage(`⚡ Generated address for ${addr.daj}: ${addr.dag}, ${addr.dai} ${addr.dak}`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleGenerateName = () => {
+    const nameData = generateSingleName(formData.dbc);
+    setFormData(prev => ({
+      ...prev,
+      dcs: nameData.dcs,
+      dac: nameData.dac,
+      dad: nameData.dad,
+      dbc: nameData.dbc
+    }));
+    setToastMessage(`⚡ Generated name: ${nameData.dac} ${nameData.dad ? nameData.dad + ' ' : ''}${nameData.dcs}`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleGenerateAllDocDetails = () => {
+    const state = formData.daj || 'CA';
+    const dln = generateSingleDLN(state);
+    const dob = formData.dbb || generateSingleDOB();
+    const issueDate = generateSingleIssueDate(dob, state);
+    const expDate = generateSingleExpiryDate(dob, issueDate, state);
+    const dcf = generateSingleDCF();
+    const icn = generateSingleICN(state);
+    const dck = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+
+    setFormData(prev => ({
+      ...prev,
+      daj: state,
+      daq: dln,
+      dbb: dob,
+      dbd: issueDate,
+      dba: expDate,
+      dcf: dcf,
+      dcg: icn,
+      dck: dck,
+      iin: IIN_MAPPING[state] || prev.iin
+    }));
+    setToastMessage(`⚡ Auto-generated all Document Numbers (DLN, Issue, Expiry, DCF, ICN) for ${state}!`);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  // Client Portal Profile Management
+  const handleSaveCurrentProfile = () => {
+    const state = formData.daj || 'US';
+    const name = `${formData.dac || 'CARDHOLDER'} ${formData.dcs || 'RECORD'}`;
+    const newProfile: SavedClientProfile = {
+      id: `profile-${Date.now()}`,
+      title: `${name} — ${state} (${formData.daq || 'No DLN'})`,
+      jurisdiction: state,
+      dln: formData.daq || 'N/A',
+      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      data: { ...formData }
+    };
+    setSavedProfiles(prev => [newProfile, ...prev]);
+    setToastMessage(`💾 Saved "${newProfile.title}" to Client Portal Records`);
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   // Clear Form Data
@@ -264,9 +475,16 @@ export default function App() {
     }));
   };
 
-  // Generate compliance barcode
+  // Generate compliance barcode & auto-save to Profiles (Monetized & Token-Gated)
   const generateBarcode = () => {
     setValidationError('');
+
+    // Check token balance
+    if (!currentUser || currentUser.token_balance <= 0) {
+      setValidationError('⚡ Insufficient Tokens: You need at least 1 token to generate a PDF417 barcode. Please top up your balance with a TRC-20 USDT deposit.');
+      setShowCheckoutModal(true);
+      return;
+    }
 
     try {
       const aamvaString = compileAAMVAString(formData);
@@ -274,6 +492,33 @@ export default function App() {
 
       if (canvasRef.current) {
         renderBarcode(aamvaString, true);
+
+        // Deduct 1 token from user balance
+        const updatedUser = PortalStore.updateUserTokens(currentUser.id, -1, true);
+        if (updatedUser) {
+          setCurrentUser(updatedUser);
+        }
+
+        // Auto-save generated barcode to Profiles list
+        const state = formData.daj || 'US';
+        const cardholderName = `${formData.dac || 'CARDHOLDER'} ${formData.dcs || ''}`.trim();
+        const generatedImg = getBarcodeImageDataUrl(canvasRef.current, backgroundMode);
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const newProfile: SavedClientProfile = {
+          id: `gen-${Date.now()}`,
+          title: `${cardholderName || 'CARDHOLDER'} — ${state} (${formData.daq || 'No DLN'})`,
+          jurisdiction: state,
+          dln: formData.daq || 'N/A',
+          createdAt: `Generated ${timeStr}`,
+          data: { ...formData },
+          barcodeString: aamvaString,
+          imageUrl: generatedImg
+        };
+
+        setSavedProfiles(prev => [newProfile, ...prev]);
+        setToastMessage(`⚡ Barcode generated & saved! 1 Token deducted. (Remaining: ${updatedUser ? updatedUser.token_balance : currentUser.token_balance - 1} Tokens)`);
+        setTimeout(() => setToastMessage(null), 4500);
       } else {
         setValidationError('Canvas node was not mounted yet. Please try again.');
       }
@@ -388,6 +633,39 @@ export default function App() {
         hint: '💡 Tap on any form input to see standard specification layout requirements, parsing tags, and auto-formatting offsets in this sticky help banner.'
       };
 
+  // Handle Logout
+  const handleLogout = () => {
+    PortalStore.logout();
+    setCurrentUser(null);
+    setViewMode('client');
+  };
+
+  // If user is not logged in, show Auth screen
+  if (!currentUser) {
+    return (
+      <AuthScreen
+        onSuccess={user => {
+          setCurrentUser(user);
+          if (user.role === 'admin') {
+            setViewMode('admin');
+          } else {
+            setViewMode('client');
+          }
+        }}
+      />
+    );
+  }
+
+  // If user navigated to Admin Panel, render Admin Center
+  if (viewMode === 'admin') {
+    return (
+      <AdminOrders
+        currentUser={currentUser}
+        onBackToPortal={() => setViewMode('client')}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#061C12] text-[#D5EFE3] font-sans flex flex-col antialiased">
       {/* HIDDEN WORKING CANVAS FOR BWIP-JS GENERATION */}
@@ -395,78 +673,135 @@ export default function App() {
 
       {/* HEADER SECTION */}
       <header className="sticky top-0 z-40 bg-[#03130C] border-b border-[#0B2D1C] shadow-xl">
-        <div className="w-full max-w-7xl mx-auto px-6 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="w-full max-w-7xl mx-auto px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#FF5C00] rounded flex items-center justify-center text-white font-extrabold shadow-[0_0_14px_rgba(255,92,0,0.45)]">
               <span className="text-[12px] font-mono tracking-tight font-black">BBT</span>
             </div>
             <div>
-              <h1 className="text-lg font-black tracking-tight text-white uppercase font-sans">
-                Bryt Barcode <span className="text-[#FF5C00]">Tec</span>
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-black tracking-tight text-white uppercase font-sans">
+                  Bryt Barcode <span className="text-[#FF5C00]">Tec</span>
+                </h1>
+                <span className="text-[9px] bg-[#041A10] border border-[#FF5C00]/40 px-2 py-0.5 rounded text-[#FF5C00] font-mono font-bold uppercase tracking-wider">
+                  Client Portal
+                </span>
+              </div>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[9px] bg-[#041A10] border border-[#FF5C00]/30 px-1.5 py-0.5 rounded text-[#FF5C00] font-mono font-bold">v10.4-STABLE</span>
-                <span className="text-[9px] text-emerald-500 font-mono uppercase hidden sm:inline">Encryption Engine: Client-side BWIP-JS</span>
+                <span className="text-[9px] bg-[#041A10] border border-emerald-500/30 px-1.5 py-0.5 rounded text-emerald-400 font-mono font-bold">CDS v10.4</span>
+                <span className="text-[9px] text-[#D5EFE3]/60 font-mono">
+                  Account: <strong className="text-white font-sans">{currentUser.email}</strong>
+                </span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
+            {/* Token Balance Indicator */}
             <button
-              onClick={loadDemoData}
-              id="btn-load-demo"
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0C2A1E] hover:bg-[#123E2C] hover:text-white text-[#D5EFE3] text-xs font-semibold rounded border border-[#1A4B36] transition cursor-pointer"
+              onClick={() => setShowCheckoutModal(true)}
+              className="flex items-center gap-2 px-3.5 py-1.5 bg-[#08281B] hover:bg-[#0E3827] border border-[#1A4B36] rounded-xl text-white transition cursor-pointer shadow-xs group"
+              title="Click to buy tokens with USDT"
             >
-              <RefreshCw className="h-3.5 w-3.5 text-[#FF5C00]" />
-              <span>Rodgers Demo</span>
+              <div className="w-5 h-5 rounded-full bg-[#FF5C00]/20 flex items-center justify-center text-[#FF5C00] group-hover:scale-110 transition">
+                <Coins className="h-3.5 w-3.5" />
+              </div>
+              <span className="text-xs font-mono font-black text-[#FF5C00]">
+                {currentUser.token_balance} <span className="text-[10px] font-sans font-medium text-[#D5EFE3]/80">Tokens</span>
+              </span>
+              <span className="text-[10px] bg-[#FF5C00] text-white px-1.5 py-0.5 rounded font-bold uppercase">
+                + Deposit
+              </span>
             </button>
+
+            {/* Admin Switcher */}
+            {currentUser.role === 'admin' && (
+              <button
+                onClick={() => setViewMode('admin')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0C2A1E] hover:bg-[#123E2C] text-[#D5EFE3] hover:text-white text-xs font-bold font-sans rounded-xl border border-[#1A4B36] transition cursor-pointer"
+                title="Open Administrator Management Center"
+              >
+                <ShieldAlert className="h-3.5 w-3.5 text-[#FF5C00]" />
+                <span>Admin Panel</span>
+              </button>
+            )}
+
+            {/* Profiles Drawer Trigger */}
             <button
-              onClick={clearForm}
-              id="btn-clear"
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#FF5C00] hover:bg-[#FF731E] hover:shadow-[0_0_12px_rgba(255,115,30,0.3)] text-white text-xs font-bold rounded transition cursor-pointer"
+              onClick={() => setShowSavedProfilesDrawer(true)}
+              id="btn-client-profiles"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#FF5C00] hover:bg-[#FF731E] text-white text-xs font-bold font-sans rounded-xl shadow-[0_2px_12px_rgba(255,92,0,0.35)] transition cursor-pointer active:scale-95"
+              title="Open generated barcodes and saved client profiles"
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span>Clear All</span>
+              <Bookmark className="h-3.5 w-3.5" />
+              <span>Profiles ({savedProfiles.length})</span>
+            </button>
+
+            {/* Logout Trigger */}
+            <button
+              onClick={handleLogout}
+              className="p-1.5 bg-[#041A10] hover:bg-[#1B1410] text-[#D5EFE3]/60 hover:text-red-400 border border-[#1A4B36] rounded-xl transition cursor-pointer"
+              title="Sign Out"
+            >
+              <LogOut className="h-4 w-4" />
             </button>
           </div>
         </div>
       </header>
 
-      {/* CONTEXTUAL HELP BANNER (Ticker style) */}
-      <div className="bg-[#FAF7EC] border-b border-[#0B2519]/15 px-6 py-2.5">
-        <div className="max-w-7xl mx-auto flex items-center gap-3">
-          <div className="w-2.5 h-2.5 rounded-full bg-[#FF5C00] animate-pulse shadow-[0_0_8px_rgba(255,92,0,0.6)] shrink-0"></div>
-          <p className="text-xs font-mono text-[#0B2519]/80 flex-1 leading-snug">
-            <span className="opacity-60 text-[#FF5C00] font-bold uppercase mr-1.5 font-sans">
-              HELP {currentHint.fieldName !== 'general' ? `[Tag: ${currentHint.fieldName.toUpperCase()}]` : '[GUIDE]'}:
-            </span> 
-            <span className="font-extrabold text-[#061E13]">{currentHint.title}</span> — <span className="font-medium text-[#0A2A1A]">{currentHint.hint}</span>
-          </p>
-        </div>
-      </div>
+      {/* TOAST NOTIFICATION FOR MOCK DATA / DEMO */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="bg-[#FF5C00] text-white px-4 py-2 text-xs font-mono font-bold flex items-center justify-between shadow-lg z-30 sticky top-[69px]"
+          >
+            <div className="max-w-7xl mx-auto flex items-center justify-between w-full">
+              <span className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                <span>{toastMessage}</span>
+              </span>
+              <button 
+                onClick={() => setToastMessage(null)}
+                className="hover:bg-white/20 p-1 rounded cursor-pointer transition ml-4"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* SPLIT DASHBOARD SECTION */}
       <div className="w-full max-w-7xl mx-auto px-6 py-6 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
         
         {/* LEFT PANEL - Form sections */}
-        <div className="lg:col-span-8 flex flex-col gap-6 lg:max-h-[calc(100vh-180px)] lg:overflow-y-auto pr-1">
+        <div className="lg:col-span-8 flex flex-col gap-6 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto pr-1">
           
-          <div className="bg-[#FAF7EC]/5 border border-[#FF5C00]/20 rounded-xl p-4 flex items-start gap-3 select-none">
-            <div className="w-5 h-5 bg-[#FF5C00]/10 border border-[#FF5C00]/35 rounded flex items-center justify-center text-[#FF5C00] shrink-0 text-xs font-mono font-black">
-              i
-            </div>
-            <div>
-              <h3 className="text-xs font-black tracking-wider text-white uppercase font-sans">
-                Non-Compulsory Compiler Active
-              </h3>
-              <p className="text-[11px] text-[#D5EFE3]/70 font-sans mt-1 leading-relaxed">
-                We have disabled mandatory field requirements as requested! Fill whichever fields you need, and they will compile precisely into the AAMVA standard string string-by-string. Blank fields are bypassed gracefully with no errors.
-              </p>
-            </div>
-          </div>
-
           {/* Section 1 */}
-          <FormSection title="1. DOCUMENT HEADER (HDR)" icon={<Sliders className="h-4 w-4 text-[#FF5C00]" />}>
+          <FormSection 
+            title="1. DOCUMENT HEADER (HDR)" 
+            icon={<Sliders className="h-4 w-4 text-[#FF5C00]" />}
+            subtitle="Standard envelope, compliance version, and jurisdiction IIN"
+            action={
+              <button
+                type="button"
+                onClick={() => {
+                  const code = formData.daj?.toUpperCase() || 'AK';
+                  const mapped = IIN_MAPPING[code] || '636000';
+                  handleInputChange('iin', mapped);
+                  setToastMessage(`⚡ Mapped standard IIN for ${code}: ${mapped}`);
+                  setTimeout(() => setToastMessage(null), 3000);
+                }}
+                className="px-2 py-0.5 bg-[#041A10] hover:bg-[#103825] text-[#D5EFE3] hover:text-white text-[10px] font-mono font-bold rounded border border-[#1A4B36] transition cursor-pointer"
+                title={`Map standard IIN for ${formData.daj || 'jurisdiction'}`}
+              >
+                <span>⚡ Auto-Map IIN</span>
+              </button>
+            }
+          >
             <SelectInput
               label="Document Standard"
               tag="FileType"
@@ -501,6 +836,15 @@ export default function App() {
                 value={formData.iin}
                 onChange={val => handleInputChange('iin', val)}
                 onFocus={() => handleFocus('iin')}
+                onGenerate={() => {
+                  const code = formData.daj?.toUpperCase() || 'AK';
+                  const mapped = IIN_MAPPING[code] || '636000';
+                  handleInputChange('iin', mapped);
+                  setToastMessage(`⚡ Mapped standard IIN for ${code}: ${mapped}`);
+                  setTimeout(() => setToastMessage(null), 3000);
+                }}
+                generateLabel="Map IIN"
+                generateTitle={`Map IIN for ${formData.daj || 'state'}`}
                 maxLength={6}
               />
               {formData.daj && (
@@ -535,7 +879,24 @@ export default function App() {
           </FormSection>
 
           {/* Section 2 */}
-          <FormSection title="2. PERSONAL INFORMATION" icon={<User className="h-4 w-4 text-[#FF5C00]" />}>
+          <FormSection 
+            title="2. PERSONAL INFORMATION" 
+            icon={<User className="h-4 w-4 text-[#FF5C00]" />}
+            subtitle="Cardholder legal identity, birth date and demographics"
+            action={
+              <button
+                type="button"
+                onClick={() => {
+                  handleGenerateName();
+                  handleGenerateDOB();
+                }}
+                className="px-2.5 py-1 bg-[#041A10] hover:bg-[#103825] text-[#D5EFE3] hover:text-white text-[10px] font-mono font-bold rounded border border-[#1A4B36] transition cursor-pointer"
+                title="Randomize legal name and date of birth"
+              >
+                <span>⚡ Roll Name & DOB</span>
+              </button>
+            }
+          >
             <TextInput
               label="Last Name"
               tag="DCS"
@@ -544,6 +905,9 @@ export default function App() {
               value={formData.dcs}
               onChange={val => handleInputChange('dcs', val)}
               onFocus={() => handleFocus('dcs')}
+              onGenerate={handleGenerateName}
+              generateLabel="Gen Name"
+              generateTitle="Generate random realistic first, middle, and last name"
             />
 
             <TextInput
@@ -554,6 +918,9 @@ export default function App() {
               value={formData.dac}
               onChange={val => handleInputChange('dac', val)}
               onFocus={() => handleFocus('dac')}
+              onGenerate={handleGenerateName}
+              generateLabel="Gen Name"
+              generateTitle="Generate random realistic name"
             />
 
             <TextInput
@@ -573,6 +940,9 @@ export default function App() {
               value={formData.dbb}
               onChange={val => formatAsDateString('dbb', val)}
               onFocus={() => handleFocus('dbb')}
+              onGenerate={handleGenerateDOB}
+              generateLabel="Gen DOB"
+              generateTitle="Generate realistic adult birth date (18-75 yrs)"
               maxLength={8}
             />
 
@@ -591,7 +961,7 @@ export default function App() {
           </FormSection>
 
           {/* Section 3 */}
-          <FormSection title="3. PHYSICAL DESCRIPTION" icon={<Compass className="h-4 w-4 text-[#FF5C00]" />}>
+          <FormSection title="3. PHYSICAL DESCRIPTION" icon={<Compass className="h-4 w-4 text-[#FF5C00]" />} subtitle="Biometric physical characteristics">
             <div className="md:col-span-2 flex flex-col gap-1.5">
               <label className="text-[10px] uppercase font-bold tracking-wider text-[#0B2519]/80 font-sans flex items-center justify-between">
                 <span>Height (Feet / Inches) <span className="text-[#FF5C00] font-black">*</span></span>
@@ -668,7 +1038,21 @@ export default function App() {
           </FormSection>
 
           {/* Section 4 */}
-          <FormSection title="4. PHYSICAL ADDRESS" icon={<MapPin className="h-4 w-4 text-[#FF5C00]" />}>
+          <FormSection 
+            title="4. PHYSICAL ADDRESS" 
+            icon={<MapPin className="h-4 w-4 text-[#FF5C00]" />}
+            subtitle="Jurisdiction-anchored street, city, state and postal code"
+            action={
+              <button
+                type="button"
+                onClick={handleGenerateAddress}
+                className="px-2.5 py-1 bg-[#041A10] hover:bg-[#103825] text-[#D5EFE3] hover:text-white text-[10px] font-mono font-bold rounded border border-[#1A4B36] transition cursor-pointer"
+                title={`Generate synthetic address for ${formData.daj || 'jurisdiction'}`}
+              >
+                <span>⚡ Auto-Gen {formData.daj || 'State'} Address</span>
+              </button>
+            }
+          >
             <TextInput
               label="Street Address"
               tag="DAG"
@@ -677,6 +1061,9 @@ export default function App() {
               value={formData.dag}
               onChange={val => handleInputChange('dag', val)}
               onFocus={() => handleFocus('dag')}
+              onGenerate={handleGenerateAddress}
+              generateLabel={`Gen ${formData.daj || 'Addr'}`}
+              generateTitle={`Generate realistic street, city and zip for ${formData.daj || 'state'}`}
               className="md:col-span-2"
             />
 
@@ -723,7 +1110,22 @@ export default function App() {
           </FormSection>
 
           {/* Section 5 */}
-          <FormSection title="5. DOCUMENT DETAILS" icon={<FileCode className="h-4 w-4 text-[#FF5C00]" />}>
+          <FormSection 
+            title="5. DOCUMENT DETAILS" 
+            icon={<FileCode className="h-4 w-4 text-[#FF5C00]" />}
+            subtitle="Jurisdictional numbers, dates, real ID and discriminator codes"
+            action={
+              <button
+                type="button"
+                onClick={handleGenerateAllDocDetails}
+                className="px-2.5 py-1 bg-[#FF5C00] hover:bg-[#FF731E] text-white text-[10px] font-mono font-bold rounded flex items-center gap-1 shadow-xs transition cursor-pointer active:scale-95"
+                title="Auto-generate all document numbers (DLN, Issue, Exp, DCF, ICN) based on jurisdiction"
+              >
+                <Wand2 className="h-3 w-3" />
+                <span>Auto-Gen All Doc Numbers</span>
+              </button>
+            }
+          >
             <TextInput
               label="Cust ID / License No"
               tag="DAQ"
@@ -732,6 +1134,9 @@ export default function App() {
               value={formData.daq}
               onChange={val => handleInputChange('daq', val)}
               onFocus={() => handleFocus('daq')}
+              onGenerate={handleGenerateDLN}
+              generateLabel={`Gen ${formData.daj || 'DLN'}`}
+              generateTitle={`Auto-generate valid license number matching ${formData.daj || 'jurisdiction'} regex pattern`}
               className="md:col-span-2"
             />
 
@@ -768,6 +1173,9 @@ export default function App() {
               value={formData.dbd}
               onChange={val => formatAsDateString('dbd', val)}
               onFocus={() => handleFocus('dbd')}
+              onGenerate={handleGenerateIssueDate}
+              generateLabel="Auto Date"
+              generateTitle="Generate chronological issue date after 18th birthday"
               maxLength={8}
             />
 
@@ -779,6 +1187,9 @@ export default function App() {
               value={formData.dba}
               onChange={val => formatAsDateString('dba', val)}
               onFocus={() => handleFocus('dba')}
+              onGenerate={handleGenerateExpiryDate}
+              generateLabel="Auto Exp"
+              generateTitle={`Generate future expiry date aligned to ${formData.daj || 'State'} renewal cycle`}
               maxLength={8}
             />
 
@@ -800,6 +1211,9 @@ export default function App() {
               value={formData.dcf}
               onChange={val => handleInputChange('dcf', val)}
               onFocus={() => handleFocus('dcf')}
+              onGenerate={handleGenerateDCF}
+              generateLabel="Gen DCF"
+              generateTitle="Generate compliant audit/document discriminator code"
             />
 
             <TextInput
@@ -809,6 +1223,9 @@ export default function App() {
               value={formData.dck || ''}
               onChange={val => handleInputChange('dck', val)}
               onFocus={() => handleFocus('dck')}
+              onGenerate={handleGenerateICN}
+              generateLabel="Gen ICN"
+              generateTitle="Generate state stock serial / ICN number"
             />
 
             <SelectInput
@@ -826,7 +1243,7 @@ export default function App() {
           </FormSection>
 
           {/* Section 6 */}
-          <FormSection title="6. PRIVILEGES & TRUNCATION" icon={<FileText className="h-4 w-4 text-[#FF5C00]" />}>
+          <FormSection title="6. PRIVILEGES & TRUNCATION" icon={<FileText className="h-4 w-4 text-[#FF5C00]" />} subtitle="Driving privileges, endorsements, and standard field truncation flags">
             <TextInput
               label="Vehicle Class"
               tag="DCA"
@@ -944,18 +1361,18 @@ export default function App() {
               </div>
             </div>
 
-            <div className="aspect-[3/1] bg-white rounded-lg p-4 flex items-center justify-center border-4 border-[#0B2519]/40 select-all shadow-inner relative group min-h-[140px] max-h-[180px] overflow-hidden">
+            <div className="w-full bg-white rounded-lg p-1 flex items-center justify-center border border-[#0B2519]/25 select-all shadow-xs relative group overflow-hidden">
               {previewImageUrl ? (
                 <img 
                   src={previewImageUrl} 
                   alt="AAMVA PDF417 Barcode Output" 
-                  className="max-h-[140px] max-w-full object-contain cursor-crosshair select-all"
+                  className="w-full max-h-[220px] object-contain cursor-crosshair select-all block"
                   id="barcode-image-output"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="text-center text-[#0B2519]/50 font-mono text-xs py-5">
-                  Fill required fields and click Compile below
+                <div className="text-center text-[#0B2519]/50 font-mono text-xs py-8">
+                  Fill fields and click Generate below
                 </div>
               )}
               
@@ -977,64 +1394,14 @@ export default function App() {
             </div>
           </div>
 
-          {/* Raw Compilation Logger Card */}
-          <div className="bg-[#FAF7EC] border border-[#0B2519]/15 rounded-xl p-5 flex flex-col gap-3.5 shadow-lg flex-1 min-h-[220px]">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-black text-[#0B2519]/70 uppercase tracking-widest font-mono">
-                Raw AAMVA Parser
-              </h3>
-              {generatedString && (
-                <button 
-                  onClick={copyRawStringToClipboard}
-                  id="btn-copy-string"
-                  className="text-[10px] font-black font-mono bg-[#FFE6D5] text-[#FF5C00] hover:bg-[#FFDCC2] px-2.5 py-1 rounded border border-[#FF5C00]/40 transition cursor-pointer flex items-center gap-1"
-                  title="Copy standard payload structure"
-                >
-                  {isCopied ? (
-                    <>
-                      <Check className="h-3 w-3" />
-                      <span>COPIED!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3 w-3" />
-                      <span>COPY STRING</span>
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-
-            <div className="flex-1 bg-white rounded border border-[#0B2519]/15 p-3.5 font-mono text-[10px] text-[#0F3A20] overflow-y-auto leading-relaxed select-all max-h-[260px] shadow-inner font-bold">
-              {generatedString ? (
-                getReadableAAMVAString(generatedString)
-                  .split('\n')
-                  .map((line, idx) => (
-                    <div key={idx} className={line.startsWith('DCS') ? 'text-[#FF5C00] bg-[#FFF0E2] px-1 rounded border border-[#FF5C00]/10 font-black' : ''}>
-                      {line}
-                    </div>
-                  ))
-              ) : (
-                <span className="text-[#0B2519]/40 font-mono">No parsed segments compilable yet.</span>
-              )}
-            </div>
-
-            {generatedString ? (
-              <div className="flex justify-between items-center text-[10px] text-[#0B2519]/60 font-mono font-bold">
-                <span>Size: {generatedString.length} Bytes</span>
-                <span>Subfiles count: 01</span>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Compile ACTION Button */}
+          {/* Generate PDF 17 Barcode ACTION Button */}
           <button
             onClick={generateBarcode}
             id="btn-generate"
             className="w-full py-4 bg-[#FF5C00] hover:bg-[#FF731E] text-white font-black uppercase text-xs tracking-[0.2em] rounded shadow-[0_4px_24px_rgba(255,92,0,0.35)] transition-all cursor-pointer active:scale-[0.98] flex items-center justify-center gap-2"
           >
             <Sparkles className="h-4 w-4 text-white animate-pulse" />
-            <span>Compile Standard Barcode</span>
+            <span>Generate PDF 17 Barcode</span>
           </button>
 
         </div>
@@ -1073,19 +1440,19 @@ export default function App() {
                    className="text-[#0B2519]/60 hover:text-[#061E13] p-1 rounded-lg hover:bg-[#E2DEC2] transition cursor-pointer"
                   title="Close modal"
                 >
-                  <XIcon className="h-5 w-5" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
 
               {/* Modal Body */}
               <div className="p-6 flex flex-col gap-6 max-h-[calc(85vh-80px)] overflow-y-auto">
                 {/* Barcode Output Panel */}
-                <div className="flex flex-col items-center gap-4">
-                  <div className="w-full bg-white p-6 rounded-xl flex items-center justify-center border-4 border-[#0B2519]/40 shadow-inner overflow-hidden min-h-[140px] relative group">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-full bg-white p-2 rounded-xl flex items-center justify-center border border-[#0B2519]/25 shadow-xs overflow-hidden relative group">
                     <img
                       src={previewImageUrl}
                       alt="Compiled PDF417 Barcode"
-                      className="max-h-[140px] max-w-full object-contain cursor-zoom-in"
+                      className="w-full max-h-[180px] object-contain cursor-zoom-in block"
                       referrerPolicy="no-referrer"
                     />
                   </div>
@@ -1164,27 +1531,182 @@ export default function App() {
         )}
       </AnimatePresence>
 
-    </div>
-  );
-}
+      {/* CLIENT PORTAL SAVED PROFILES DRAWER */}
+      <AnimatePresence>
+        {showSavedProfilesDrawer && (
+          <div className="fixed inset-0 z-50 bg-[#03130C]/85 backdrop-blur-sm flex justify-end">
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="bg-[#FAF7EC] w-full max-w-md h-full shadow-2xl flex flex-col border-l border-[#0B2519]/20 text-[#061E13]"
+            >
+              {/* Drawer Header */}
+              <div className="px-6 py-4 border-b border-[#0B2519]/15 flex items-center justify-between bg-[#EFECE0]">
+                <div className="flex items-center gap-2">
+                  <Bookmark className="h-4 w-4 text-[#FF5C00]" />
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-wider text-[#061E13] font-sans">
+                      Client Portal Profiles
+                    </h3>
+                    <p className="text-[10px] text-[#0B2519]/60 font-sans">
+                      Saved client cases and preloaded jurisdictional templates
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSavedProfilesDrawer(false)}
+                  className="text-[#0B2519]/60 hover:text-[#061E13] p-1.5 rounded-lg hover:bg-[#E2DEC2] transition cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
 
-// Minimal Clean Inline Custom SVG Icon representation of Close/X to avoid bundling errors
-function XIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
+              {/* Drawer Quick Action Bar */}
+              <div className="p-4 bg-white border-b border-[#0B2519]/10 flex items-center justify-between gap-2">
+                <button
+                  onClick={() => {
+                    handleSaveCurrentProfile();
+                  }}
+                  className="flex-1 py-2 px-3 bg-[#FF5C00] hover:bg-[#FF731E] text-white text-xs font-bold font-sans rounded flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
+                >
+                  <FolderDown className="h-3.5 w-3.5" />
+                  <span>Save Current Form to Profiles</span>
+                </button>
+                {savedProfiles.length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (confirm('Clear all profiles?')) {
+                        setSavedProfiles([]);
+                        setToastMessage('Cleared all profiles');
+                        setTimeout(() => setToastMessage(null), 2500);
+                      }
+                    }}
+                    className="py-2 px-3 bg-[#1B1410] hover:bg-[#2B1B15] text-[#FF9E66] text-xs font-bold rounded border border-[#FF5C00]/30 transition cursor-pointer"
+                    title="Clear all profiles"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Profile Records List */}
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between text-[10px] uppercase font-bold text-[#0B2519]/60 tracking-wider font-mono px-1">
+                  <span>Generated Barcodes & Saved Profiles ({savedProfiles.length})</span>
+                </div>
+
+                {savedProfiles.length === 0 ? (
+                  <div className="bg-white border border-[#0B2519]/10 rounded-xl p-8 text-center text-[#0B2519]/60 text-xs flex flex-col items-center gap-2">
+                    <Bookmark className="h-8 w-8 text-[#FF5C00]/40" />
+                    <p className="font-bold text-[#061E13]">No barcodes generated yet</p>
+                    <p className="text-[11px] text-[#0B2519]/50">Fill the client portal form and click &quot;Compile Standard Barcode&quot; to generate and save here automatically.</p>
+                  </div>
+                ) : (
+                  savedProfiles.map(prof => (
+                    <div
+                      key={prof.id}
+                      className="bg-white border border-[#0B2519]/15 hover:border-[#FF5C00]/50 rounded-xl p-3.5 shadow-xs transition flex flex-col gap-2.5 group"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded bg-[#041A10] text-[#FF5C00] font-mono font-bold text-xs flex items-center justify-center border border-[#1A4B36]">
+                            {prof.jurisdiction}
+                          </span>
+                          <div>
+                            <h4 className="text-xs font-bold text-[#061E13] leading-snug">
+                              {prof.title}
+                            </h4>
+                            <span className="text-[10px] text-[#0B2519]/50 font-mono">
+                              {prof.createdAt}
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            setSavedProfiles(prev => prev.filter(p => p.id !== prof.id));
+                            setToastMessage(`Deleted profile: ${prof.title}`);
+                            setTimeout(() => setToastMessage(null), 2500);
+                          }}
+                          className="opacity-60 hover:opacity-100 text-[#0B2519]/40 hover:text-red-600 p-1 transition cursor-pointer"
+                          title="Delete profile"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Barcode Image Preview Thumbnail if generated */}
+                      {prof.imageUrl && (
+                        <div className="bg-white p-2 rounded border border-[#0B2519]/10 flex items-center justify-center">
+                          <img
+                            src={prof.imageUrl}
+                            alt="Generated Barcode Thumbnail"
+                            className="max-h-16 object-contain rounded"
+                          />
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-2 text-[10px] font-mono bg-[#FAF7EC] p-2 rounded border border-[#0B2519]/10">
+                        <div>
+                          <span className="text-[#0B2519]/50 block">Cardholder:</span>
+                          <span className="font-bold text-[#061E13]">
+                            {prof.data.dac} {prof.data.dcs}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[#0B2519]/50 block">DLN / License:</span>
+                          <span className="font-bold text-[#061E13]">
+                            {prof.data.daq || 'None'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => {
+                            handleLoadSyntheticRecord(prof.data, `📋 Loaded Profile: ${prof.title}`);
+                            setShowSavedProfilesDrawer(false);
+                          }}
+                          className="flex-1 py-1.5 bg-[#FAF7EC] hover:bg-[#FFE6D5] text-[#061E13] hover:text-[#FF5C00] font-bold text-[11px] rounded border border-[#0B2519]/15 hover:border-[#FF5C00]/40 transition flex items-center justify-center gap-1.5 cursor-pointer font-sans"
+                        >
+                          <span>Load into Form</span>
+                          <ArrowRight className="h-3 w-3" />
+                        </button>
+
+                        {prof.barcodeString && (
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(prof.barcodeString || '');
+                              setToastMessage('📋 Copied AAMVA payload to clipboard!');
+                              setTimeout(() => setToastMessage(null), 2500);
+                            }}
+                            className="p-1.5 bg-[#FAF7EC] hover:bg-[#FFE6D5] text-[#061E13] hover:text-[#FF5C00] font-bold text-[11px] rounded border border-[#0B2519]/15 hover:border-[#FF5C00]/40 transition cursor-pointer"
+                            title="Copy AAMVA raw payload string"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* TRC-20 USDT CHECKOUT & TOKEN DEPOSIT MODAL */}
+      <Trc20Checkout
+        isOpen={showCheckoutModal}
+        onClose={() => setShowCheckoutModal(false)}
+        user={currentUser}
+        onBalanceUpdated={updated => setCurrentUser(updated)}
+      />
+
+    </div>
   );
 }

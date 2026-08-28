@@ -1,0 +1,700 @@
+import React, { useState } from 'react';
+import { 
+  Shield, 
+  Users, 
+  Receipt, 
+  CheckCircle2, 
+  XCircle, 
+  Clock, 
+  ExternalLink, 
+  Plus, 
+  Trash2, 
+  Edit3, 
+  Save, 
+  Coins, 
+  DollarSign, 
+  ArrowLeft, 
+  RefreshCw,
+  Search,
+  Sliders,
+  Check,
+  Database,
+  Copy,
+  Code
+} from 'lucide-react';
+import { PortalStore, PortalSettings } from '../utils/portalStore';
+import { 
+  getSupabaseConfig, 
+  saveSupabaseConfig, 
+  isSupabaseConfigured, 
+  SUPABASE_SQL_SCHEMA,
+  SupabaseService 
+} from '../utils/supabase';
+import { User, Order, OrderStatus } from '../types';
+
+interface AdminOrdersProps {
+  onBackToPortal: () => void;
+  currentUser: User;
+}
+
+export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, currentUser }) => {
+  const [orders, setOrders] = useState<Order[]>(PortalStore.getAllOrders());
+  const [users, setUsers] = useState<User[]>(PortalStore.getAllUsers());
+  const [settings, setSettings] = useState<PortalSettings>(PortalStore.getSettings());
+  const [activeTab, setActiveTab] = useState<'orders' | 'users' | 'settings' | 'supabase'>('orders');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Address edit state
+  const [editAddress, setEditAddress] = useState(settings.depositAddress);
+  const [editContract, setEditContract] = useState(settings.usdtContract);
+  const [isSavedSettings, setIsSavedSettings] = useState(false);
+
+  // Supabase config state
+  const [supabaseConfig, setSupabaseConfigState] = useState(getSupabaseConfig());
+  const [isSqlCopied, setIsSqlCopied] = useState(false);
+
+  // Filter state
+  const [orderSearch, setOrderSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const refreshData = () => {
+    setOrders(PortalStore.getAllOrders());
+    setUsers(PortalStore.getAllUsers());
+    showToast('Data refreshed');
+  };
+
+  const handleForceApprove = (orderId: string) => {
+    const updated = PortalStore.adminForceApproveOrder(orderId);
+    if (updated) {
+      setOrders(PortalStore.getAllOrders());
+      setUsers(PortalStore.getAllUsers());
+      showToast(`Order ${orderId} force-approved and credited!`);
+    }
+  };
+
+  const handleRejectOrder = (orderId: string) => {
+    const updated = PortalStore.adminRejectOrder(orderId);
+    if (updated) {
+      setOrders(PortalStore.getAllOrders());
+      showToast(`Order ${orderId} rejected.`);
+    }
+  };
+
+  const handleAddTokens = (userId: string, count: number) => {
+    const updated = PortalStore.updateUserTokens(userId, count, true);
+    if (updated) {
+      setUsers(PortalStore.getAllUsers());
+      showToast(`Added +${count} tokens to ${updated.email}`);
+    }
+  };
+
+  const handleSetTokens = (userId: string, current: number) => {
+    const input = prompt('Enter new token balance for user:', current.toString());
+    if (input !== null) {
+      const parsed = parseInt(input, 10);
+      if (!isNaN(parsed) && parsed >= 0) {
+        const updated = PortalStore.updateUserTokens(userId, parsed, false);
+        if (updated) {
+          setUsers(PortalStore.getAllUsers());
+          showToast(`Set ${updated.email} balance to ${parsed} tokens`);
+        }
+      }
+    }
+  };
+
+  const handleDeleteUser = (userId: string, email: string) => {
+    if (userId === currentUser.id) {
+      alert('You cannot delete your own active admin account.');
+      return;
+    }
+    if (confirm(`Are you sure you want to delete user ${email}?`)) {
+      PortalStore.deleteUser(userId);
+      setUsers(PortalStore.getAllUsers());
+      showToast(`Deleted user ${email}`);
+    }
+  };
+
+  const handleSaveSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated = PortalStore.saveSettings({
+      depositAddress: editAddress.trim(),
+      usdtContract: editContract.trim()
+    });
+    setSettings(updated);
+    setIsSavedSettings(true);
+    showToast('TRC-20 deposit settings updated successfully!');
+    setTimeout(() => setIsSavedSettings(false), 2500);
+  };
+
+  const handleSaveSupabaseConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveSupabaseConfig(supabaseConfig);
+    showToast('Supabase configuration saved!');
+  };
+
+  const copySqlSchema = () => {
+    navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA.trim());
+    setIsSqlCopied(true);
+    showToast('Supabase SQL Schema copied to clipboard!');
+    setTimeout(() => setIsSqlCopied(false), 2000);
+  };
+
+  // Metrics
+  const totalUsdt = orders
+    .filter(o => o.status === 'approved')
+    .reduce((sum, o) => sum + (o.verified_amount || o.amount_usdt), 0);
+  const totalApprovedOrders = orders.filter(o => o.status === 'approved').length;
+  const pendingOrdersCount = orders.filter(o => o.status === 'pending_payment' || o.status === 'verifying').length;
+
+  const filteredOrders = orders.filter(o => {
+    const matchesSearch = 
+      o.id.toLowerCase().includes(orderSearch.toLowerCase()) ||
+      o.user_email.toLowerCase().includes(orderSearch.toLowerCase()) ||
+      (o.tx_hash && o.tx_hash.toLowerCase().includes(orderSearch.toLowerCase()));
+    const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  return (
+    <div className="min-h-screen bg-[#04140D] text-[#D5EFE3] flex flex-col font-sans">
+      
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#FF5C00] text-white font-mono font-bold text-xs px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 border border-white/20 animate-fade-in">
+          <Check className="h-4 w-4" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Admin Top Navigation */}
+      <header className="bg-[#082216] border-b border-[#1A4B36] sticky top-0 z-30 px-6 py-4">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onBackToPortal}
+              className="p-2 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] rounded-xl text-white transition cursor-pointer flex items-center gap-1 text-xs font-bold font-sans"
+              title="Return to Client Portal"
+            >
+              <ArrowLeft className="h-4 w-4 text-[#FF5C00]" />
+              <span>Client Portal</span>
+            </button>
+
+            <div className="h-6 w-px bg-[#1A4B36]" />
+
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-[#FF5C00] flex items-center justify-center text-white shadow-[0_0_12px_rgba(255,92,0,0.4)]">
+                <Shield className="h-4 w-4" />
+              </div>
+              <div>
+                <h1 className="text-base font-bold text-white font-sans flex items-center gap-2">
+                  <span>Administrator Center</span>
+                  <span className="text-[10px] bg-[#FF5C00]/20 text-[#FF5C00] px-2 py-0.5 rounded font-mono font-bold border border-[#FF5C00]/30">
+                    MASTER
+                  </span>
+                </h1>
+              </div>
+            </div>
+          </div>
+
+          {/* Tab Navigation */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setActiveTab('orders')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'orders'
+                  ? 'bg-[#FF5C00] text-white shadow-md'
+                  : 'bg-[#041A10] text-[#D5EFE3] hover:bg-[#103825] border border-[#1A4B36]'
+              }`}
+            >
+              <Receipt className="h-3.5 w-3.5" />
+              <span>TRC-20 Orders ({orders.length})</span>
+              {pendingOrdersCount > 0 && (
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'users'
+                  ? 'bg-[#FF5C00] text-white shadow-md'
+                  : 'bg-[#041A10] text-[#D5EFE3] hover:bg-[#103825] border border-[#1A4B36]'
+              }`}
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span>Users & Tokens ({users.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'settings'
+                  ? 'bg-[#FF5C00] text-white shadow-md'
+                  : 'bg-[#041A10] text-[#D5EFE3] hover:bg-[#103825] border border-[#1A4B36]'
+              }`}
+            >
+              <Sliders className="h-3.5 w-3.5" />
+              <span>TRON Gateway</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('supabase')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'supabase'
+                  ? 'bg-[#FF5C00] text-white shadow-md'
+                  : 'bg-[#041A10] text-[#D5EFE3] hover:bg-[#103825] border border-[#1A4B36]'
+              }`}
+            >
+              <Database className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Supabase DB</span>
+            </button>
+
+            <button
+              onClick={refreshData}
+              className="p-2 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] rounded-xl text-[#D5EFE3] hover:text-white transition cursor-pointer"
+              title="Refresh Data"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="max-w-7xl mx-auto w-full px-6 py-6 flex-1 flex flex-col gap-6">
+        
+        {/* KPI Metrics */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-[11px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Total Revenue</span>
+              <div className="text-xl font-black text-white font-mono mt-0.5">{totalUsdt.toFixed(2)} USDT</div>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <DollarSign className="h-5 w-5" />
+            </div>
+          </div>
+
+          <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-[11px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Approved Orders</span>
+              <div className="text-xl font-black text-[#FF5C00] font-mono mt-0.5">{totalApprovedOrders} / {orders.length}</div>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-[#FF5C00]/10 border border-[#FF5C00]/30 flex items-center justify-center text-[#FF5C00]">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+          </div>
+
+          <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-[11px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Registered Users</span>
+              <div className="text-xl font-black text-white font-mono mt-0.5">{users.length} Users</div>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+              <Users className="h-5 w-5" />
+            </div>
+          </div>
+
+          <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-4 flex items-center justify-between shadow-sm">
+            <div>
+              <span className="text-[11px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Database Status</span>
+              <div className="text-xs font-bold text-white font-mono mt-1 flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                <span>{isSupabaseConfigured() ? 'Supabase Cloud' : 'Local Storage'}</span>
+              </div>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Database className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
+
+        {/* TAB 1: TRC-20 ORDERS & DEPOSITS */}
+        {activeTab === 'orders' && (
+          <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
+            {/* Filter Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative w-full sm:w-80">
+                <input
+                  type="text"
+                  value={orderSearch}
+                  onChange={e => setOrderSearch(e.target.value)}
+                  placeholder="Search Order ID, Email, TxHash..."
+                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl pl-9 pr-3 py-2 text-xs outline-none font-sans"
+                />
+                <Search className="h-4 w-4 text-[#D5EFE3]/40 absolute left-3 top-2.5" />
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value)}
+                  className="bg-[#041A10] border border-[#1A4B36] text-[#D5EFE3] text-xs font-bold font-mono rounded-xl px-3 py-2 outline-none cursor-pointer"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="approved">Approved</option>
+                  <option value="verifying">Verifying</option>
+                  <option value="pending_payment">Pending Payment</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Orders Table */}
+            <div className="overflow-x-auto rounded-xl border border-[#1A4B36]">
+              <table className="w-full text-left text-xs font-sans">
+                <thead className="bg-[#041A10] text-[#D5EFE3]/70 font-mono uppercase tracking-wider text-[10px] border-b border-[#1A4B36]">
+                  <tr>
+                    <th className="py-3 px-4">Order ID & Date</th>
+                    <th className="py-3 px-4">User</th>
+                    <th className="py-3 px-4">USDT Amount</th>
+                    <th className="py-3 px-4">Tokens</th>
+                    <th className="py-3 px-4">TxID (Tronscan)</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1A4B36]/60 bg-[#082216]">
+                  {filteredOrders.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-[#D5EFE3]/50 font-mono">
+                        No orders matching filter criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredOrders.map(order => (
+                      <tr key={order.id} className="hover:bg-[#0C2A1E]/50 transition">
+                        <td className="py-3 px-4 font-mono">
+                          <div className="font-bold text-white">{order.id}</div>
+                          <div className="text-[10px] text-[#D5EFE3]/50">
+                            {new Date(order.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-4 font-medium text-white">
+                          {order.user_email}
+                        </td>
+
+                        <td className="py-3 px-4 font-mono font-bold text-emerald-400">
+                          {order.amount_usdt}.00 USDT
+                        </td>
+
+                        <td className="py-3 px-4 font-mono font-bold text-[#FF5C00]">
+                          +{order.tokens_to_credit}
+                        </td>
+
+                        <td className="py-3 px-4 font-mono">
+                          {order.tx_hash ? (
+                            <a
+                              href={`https://tronscan.org/#/transaction/${order.tx_hash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#FF5C00] hover:underline flex items-center gap-1 font-bold"
+                              title={order.tx_hash}
+                            >
+                              <span>{order.tx_hash.substring(0, 10)}...{order.tx_hash.substring(order.tx_hash.length - 6)}</span>
+                              <ExternalLink className="h-3 w-3 shrink-0" />
+                            </a>
+                          ) : (
+                            <span className="text-[#D5EFE3]/40 italic">Awaiting TxID</span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono ${
+                              order.status === 'approved'
+                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                                : order.status === 'verifying'
+                                ? 'bg-amber-950 text-amber-300 border border-amber-500/40'
+                                : order.status === 'rejected'
+                                ? 'bg-red-950 text-red-300 border border-red-500/40'
+                                : 'bg-[#041A10] text-[#D5EFE3]/70 border border-[#1A4B36]'
+                            }`}
+                          >
+                            {order.status === 'approved' && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
+                            {order.status === 'verifying' && <Clock className="h-3 w-3 text-amber-400 animate-spin" />}
+                            {order.status === 'rejected' && <XCircle className="h-3 w-3 text-red-400" />}
+                            <span className="uppercase">{order.status.replace('_', ' ')}</span>
+                          </span>
+                        </td>
+
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {order.status !== 'approved' && (
+                              <button
+                                onClick={() => handleForceApprove(order.id)}
+                                className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-[11px] font-bold font-sans transition cursor-pointer"
+                                title="Force Approve & Credit Tokens"
+                              >
+                                Force Approve
+                              </button>
+                            )}
+
+                            {order.status !== 'rejected' && (
+                              <button
+                                onClick={() => handleRejectOrder(order.id)}
+                                className="px-2.5 py-1 bg-red-950 hover:bg-red-800 text-red-200 border border-red-500/40 rounded-lg text-[11px] font-bold font-sans transition cursor-pointer"
+                                title="Reject Order"
+                              >
+                                Reject
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: USERS & TOKEN BALANCES */}
+        {activeTab === 'users' && (
+          <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white font-sans">User Management</h3>
+                <p className="text-xs text-[#D5EFE3]/70 font-sans">View client balances and adjust token credits</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-[#1A4B36]">
+              <table className="w-full text-left text-xs font-sans">
+                <thead className="bg-[#041A10] text-[#D5EFE3]/70 font-mono uppercase tracking-wider text-[10px] border-b border-[#1A4B36]">
+                  <tr>
+                    <th className="py-3 px-4">User ID & Email</th>
+                    <th className="py-3 px-4">Role</th>
+                    <th className="py-3 px-4">Token Balance</th>
+                    <th className="py-3 px-4">Registered Date</th>
+                    <th className="py-3 px-4 text-right">Credit Tokens / Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1A4B36]/60 bg-[#082216]">
+                  {users.map(u => (
+                    <tr key={u.id} className="hover:bg-[#0C2A1E]/50 transition">
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-white">{u.email}</div>
+                        <div className="text-[10px] text-[#D5EFE3]/50 font-mono">{u.id}</div>
+                      </td>
+
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                            u.role === 'admin'
+                              ? 'bg-[#FF5C00]/20 text-[#FF5C00] border border-[#FF5C00]/40'
+                              : 'bg-[#041A10] text-[#D5EFE3] border border-[#1A4B36]'
+                          }`}
+                        >
+                          {u.role}
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-4 font-mono">
+                        <div className="text-base font-black text-[#FF5C00]">
+                          {u.token_balance} <span className="text-xs font-normal text-[#D5EFE3]/70">Tokens</span>
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-4 text-[#D5EFE3]/60 font-mono text-[11px]">
+                        {new Date(u.created_at).toLocaleDateString()}
+                      </td>
+
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleAddTokens(u.id, 5)}
+                            className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-white rounded-lg text-[11px] font-mono font-bold transition cursor-pointer"
+                            title="Add +5 tokens"
+                          >
+                            +5
+                          </button>
+                          <button
+                            onClick={() => handleAddTokens(u.id, 25)}
+                            className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-white rounded-lg text-[11px] font-mono font-bold transition cursor-pointer"
+                            title="Add +25 tokens"
+                          >
+                            +25
+                          </button>
+                          <button
+                            onClick={() => handleSetTokens(u.id, u.token_balance)}
+                            className="p-1.5 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#FF5C00] rounded-lg text-[11px] transition cursor-pointer"
+                            title="Set custom token balance"
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
+                          {u.id !== currentUser.id && (
+                            <button
+                              onClick={() => handleDeleteUser(u.id, u.email)}
+                              className="p-1.5 bg-red-950/60 hover:bg-red-800 text-red-300 border border-red-500/30 rounded-lg text-[11px] transition cursor-pointer"
+                              title="Delete user"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: TRON GATEWAY CONFIGURATION */}
+        {activeTab === 'settings' && (
+          <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-6 flex flex-col gap-5 shadow-xl max-w-3xl">
+            <div>
+              <h3 className="text-base font-bold text-white font-sans">TRON (TRC-20) Gateway Settings</h3>
+              <p className="text-xs text-[#D5EFE3]/70 font-sans mt-0.5">
+                Configure your static Binance TRC-20 deposit address and token contract for Tronscan automated verification.
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveSettings} className="flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
+                  TRC-20 Deposit Address (Binance / Wallet)
+                </label>
+                <input
+                  type="text"
+                  value={editAddress}
+                  onChange={e => setEditAddress(e.target.value)}
+                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-3 text-xs font-mono outline-none"
+                  required
+                />
+                <p className="text-[11px] text-[#D5EFE3]/50 font-sans mt-1">
+                  Users will send USDT to this address and QR code.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
+                  TRON USDT Contract Address
+                </label>
+                <input
+                  type="text"
+                  value={editContract}
+                  onChange={e => setEditContract(e.target.value)}
+                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-3 text-xs font-mono outline-none"
+                  required
+                />
+                <p className="text-[11px] text-[#D5EFE3]/50 font-sans mt-1">
+                  Default Official TRON USDT: <span className="font-mono text-[#FF5C00]">TR7NHqjekKQxGTCi8q8ZY4pL8otSzgjLj6</span>
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="bg-[#FF5C00] hover:bg-[#FF731E] text-white font-bold py-3 px-6 rounded-xl transition flex items-center gap-2 cursor-pointer text-sm shadow-md"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>Save Gateway Settings</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* TAB 4: SUPABASE DATABASE MANAGEMENT */}
+        {activeTab === 'supabase' && (
+          <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-6 flex flex-col gap-6 shadow-xl max-w-4xl">
+            <div className="flex items-center justify-between border-b border-[#1A4B36] pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                  <Database className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white font-sans">Supabase PostgreSQL Integration</h3>
+                  <p className="text-xs text-[#D5EFE3]/70 font-sans">Cloud synchronization for user accounts, TRC-20 orders, and settings</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 bg-[#041A10] border border-[#1A4B36] px-3 py-1.5 rounded-xl text-xs font-mono">
+                <span className={`w-2.5 h-2.5 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                <span className="text-white font-bold">{isSupabaseConfigured() ? 'Cloud Synchronized' : 'Local Fallback'}</span>
+              </div>
+            </div>
+
+            {/* Supabase Configuration Form */}
+            <form onSubmit={handleSaveSupabaseConfig} className="flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
+                  Supabase Project URL (VITE_SUPABASE_URL)
+                </label>
+                <input
+                  type="text"
+                  value={supabaseConfig.url}
+                  onChange={e => setSupabaseConfigState({ ...supabaseConfig, url: e.target.value })}
+                  placeholder="https://your-project-id.supabase.co"
+                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-3 text-xs font-mono outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
+                  Supabase Anon API Key (VITE_SUPABASE_ANON_KEY)
+                </label>
+                <input
+                  type="password"
+                  value={supabaseConfig.anonKey}
+                  onChange={e => setSupabaseConfigState({ ...supabaseConfig, anonKey: e.target.value })}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-3 text-xs font-mono outline-none"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="bg-[#FF5C00] hover:bg-[#FF731E] text-white font-bold py-2.5 px-5 rounded-xl transition flex items-center gap-2 cursor-pointer text-xs shadow-md"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>Save Supabase Credentials</span>
+                </button>
+              </div>
+            </form>
+
+            {/* SQL Migration Script Copy Box */}
+            <div className="bg-[#041A10] border border-[#1A4B36] rounded-2xl p-5 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Code className="h-4 w-4 text-[#FF5C00]" />
+                  <span className="text-xs font-bold text-white font-mono uppercase">
+                    Supabase SQL Schema & Table Migration
+                  </span>
+                </div>
+                <button
+                  onClick={copySqlSchema}
+                  className="bg-[#082216] hover:bg-[#103825] border border-[#1A4B36] text-white px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isSqlCopied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 text-[#FF5C00]" />}
+                  <span>{isSqlCopied ? 'Copied SQL!' : 'Copy SQL Script'}</span>
+                </button>
+              </div>
+
+              <p className="text-[11px] text-[#D5EFE3]/70 font-sans">
+                Paste this script into your Supabase project's <strong>SQL Editor</strong> to create the <code>portal_users</code>, <code>trc20_orders</code>, <code>portal_settings</code>, and <code>saved_profiles</code> tables.
+              </p>
+
+              <pre className="bg-[#020D08] border border-[#1A4B36]/60 rounded-xl p-3 text-[11px] font-mono text-emerald-400/90 overflow-x-auto max-h-48">
+                {SUPABASE_SQL_SCHEMA.trim()}
+              </pre>
+            </div>
+
+          </div>
+        )}
+
+      </main>
+    </div>
+  );
+};
