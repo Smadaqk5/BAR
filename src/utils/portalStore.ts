@@ -17,9 +17,11 @@ export interface PortalSettings {
 
 export const DEFAULT_PACKAGES: TokenPackage[] = [
   { id: 'pkg-1', usdt: 10, tokens: 10, label: 'Starter Pack', bonus: '10 Barcodes ($1/ea)', enabled: true },
-  { id: 'pkg-2', usdt: 25, tokens: 30, label: 'Pro Pack', popular: true, bonus: '+5 Bonus Barcodes', enabled: true },
-  { id: 'pkg-3', usdt: 50, tokens: 70, label: 'Agency Pack', bonus: '+20 Bonus Barcodes', enabled: true },
-  { id: 'pkg-4', usdt: 100, tokens: 150, label: 'Enterprise Pack', bonus: '+50 Bonus Barcodes', enabled: true }
+  { id: 'pkg-2', usdt: 25, tokens: 30, label: 'Pro Pack', bonus: '+5 Bonus Barcodes', enabled: true },
+  { id: 'pkg-weekly', usdt: 45, tokens: 65, label: 'Weekly Package', popular: true, bonus: 'Weekly Pass (+20 Bonus)', description: 'Best for weekly volume production', enabled: true },
+  { id: 'pkg-3', usdt: 75, tokens: 115, label: 'Agency Pack', bonus: '+40 Bonus Barcodes', enabled: true },
+  { id: 'pkg-monthly', usdt: 150, tokens: 260, label: 'Monthly Package', bonus: 'Monthly VIP (+110 Bonus)', description: 'Maximum savings for high-volume monthly issuance', enabled: true },
+  { id: 'pkg-4', usdt: 250, tokens: 500, label: 'Enterprise Pack', bonus: '2x Barcode Multiplier', description: 'Enterprise volume with dedicated support', enabled: true }
 ];
 
 const DEFAULT_SETTINGS: PortalSettings = {
@@ -89,6 +91,40 @@ export const PortalStore = {
         }
         return p;
       });
+
+      // Ensure Weekly and Monthly packages are included if missing from older sessions
+      const hasWeekly = parsed.some(p => p.id === 'pkg-weekly' || p.label.toLowerCase().includes('weekly'));
+      const hasMonthly = parsed.some(p => p.id === 'pkg-monthly' || p.label.toLowerCase().includes('monthly'));
+      if (!hasWeekly || !hasMonthly) {
+        if (!hasWeekly) {
+          const insertIdx = Math.min(2, parsed.length);
+          parsed.splice(insertIdx, 0, {
+            id: 'pkg-weekly',
+            usdt: 45,
+            tokens: 65,
+            label: 'Weekly Package',
+            popular: true,
+            bonus: 'Weekly Pass (+20 Bonus)',
+            description: 'Best for weekly volume production',
+            enabled: true
+          });
+        }
+        if (!hasMonthly) {
+          const monthlyIdx = parsed.findIndex(p => p.id === 'pkg-4' || p.label.toLowerCase().includes('enterprise'));
+          const insertIdx = monthlyIdx !== -1 ? monthlyIdx : parsed.length;
+          parsed.splice(insertIdx, 0, {
+            id: 'pkg-monthly',
+            usdt: 150,
+            tokens: 260,
+            label: 'Monthly Package',
+            bonus: 'Monthly VIP (+110 Bonus)',
+            description: 'Maximum savings for high-volume monthly issuance',
+            enabled: true
+          });
+        }
+        needsSave = true;
+      }
+
       if (needsSave) {
         localStorage.setItem(PACKAGES_KEY, JSON.stringify(parsed));
       }

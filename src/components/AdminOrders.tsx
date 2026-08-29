@@ -979,52 +979,85 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                 </div>
               </div>
 
-              {/* Quick Multipliers */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] font-mono text-[#D5EFE3]/60 mr-1">Quick Rates:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPkgTokens(pkgUsdt);
-                    setPkgBonus('1 USDT = 1 Barcode');
-                  }}
-                  className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
-                >
-                  1:1 (Standard)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const t = Math.round(pkgUsdt * 1.2);
-                    setPkgTokens(t);
-                    setPkgBonus(`+${t - pkgUsdt} Bonus Barcodes`);
-                  }}
-                  className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
-                >
-                  +20% Bonus
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const t = Math.round(pkgUsdt * 1.5);
-                    setPkgTokens(t);
-                    setPkgBonus(`+${t - pkgUsdt} Bonus Barcodes`);
-                  }}
-                  className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
-                >
-                  +50% Bonus
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const t = pkgUsdt * 2;
-                    setPkgTokens(t);
-                    setPkgBonus('2x Barcode Multiplier');
-                  }}
-                  className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
-                >
-                  2x Barcodes
-                </button>
+              {/* Quick Multipliers & Presets */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-mono text-[#D5EFE3]/60 mr-1">Templates:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPkgLabel('Weekly Package');
+                      setPkgUsdt(45);
+                      setPkgTokens(65);
+                      setPkgBonus('Weekly Pass (+20 Bonus)');
+                      setPkgDescription('Best for weekly volume production');
+                      setPkgPopular(true);
+                    }}
+                    className="px-2 py-1 bg-[#103825] hover:bg-[#1A4B36] border border-[#FF5C00]/40 text-white rounded-lg text-[10px] font-mono font-bold transition cursor-pointer"
+                  >
+                    📅 Weekly Preset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPkgLabel('Monthly Package');
+                      setPkgUsdt(150);
+                      setPkgTokens(260);
+                      setPkgBonus('Monthly VIP (+110 Bonus)');
+                      setPkgDescription('Maximum savings for high-volume monthly issuance');
+                    }}
+                    className="px-2 py-1 bg-[#103825] hover:bg-[#1A4B36] border border-[#FF5C00]/40 text-white rounded-lg text-[10px] font-mono font-bold transition cursor-pointer"
+                  >
+                    👑 Monthly Preset
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-mono text-[#D5EFE3]/60 mr-1">Quick Rates:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPkgTokens(pkgUsdt);
+                      setPkgBonus('1 USDT = 1 Barcode');
+                    }}
+                    className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
+                  >
+                    1:1 (Standard)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const t = Math.round(pkgUsdt * 1.2);
+                      setPkgTokens(t);
+                      setPkgBonus(`+${t - pkgUsdt} Bonus Barcodes`);
+                    }}
+                    className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
+                  >
+                    +20% Bonus
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const t = Math.round(pkgUsdt * 1.5);
+                      setPkgTokens(t);
+                      setPkgBonus(`+${t - pkgUsdt} Bonus Barcodes`);
+                    }}
+                    className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
+                  >
+                    +50% Bonus
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const t = pkgUsdt * 2;
+                      setPkgTokens(t);
+                      setPkgBonus('2x Barcode Multiplier');
+                    }}
+                    className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
+                  >
+                    2x Barcodes
+                  </button>
+                </div>
               </div>
 
               {/* Bonus / Subtitle Tag */}

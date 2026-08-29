@@ -228,8 +228,8 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-2.5">
                     1. Select Barcode Package
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {packages.map(pkg => (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {packages.filter(p => p.enabled !== false).map(pkg => (
                       <button
                         key={pkg.id || `${pkg.usdt}-${pkg.tokens}`}
                         type="button"
