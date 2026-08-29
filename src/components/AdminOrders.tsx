@@ -993,8 +993,8 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                     type="button"
                     onClick={() => {
                       setPkgLabel('Weekly Package');
-                      setPkgUsdt(45);
-                      setPkgTokens(65);
+                      setPkgUsdt(200);
+                      setPkgTokens(200);
                       setPkgBonus('Weekly Pass (+20 Bonus)');
                       setPkgDescription('Best for weekly volume production');
                       setPkgPopular(true);
