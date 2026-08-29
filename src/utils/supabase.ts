@@ -9,10 +9,24 @@ export interface SupabaseConfig {
 }
 
 export function getSupabaseConfig(): SupabaseConfig {
-  return {
-    url: ((import.meta as any).env?.VITE_SUPABASE_URL || '').trim(),
-    anonKey: ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '').trim()
-  };
+  const env = (import.meta as any).env || {};
+  const url = (
+    env.VITE_SUPABASE_URL ||
+    env.NEXT_PUBLIC_SUPABASE_URL ||
+    env.SUPABASE_URL ||
+    ''
+  ).trim();
+
+  const anonKey = (
+    env.VITE_SUPABASE_ANON_KEY ||
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    env.SUPABASE_ANON_KEY ||
+    env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    env.SUPABASE_PUBLISHABLE_KEY ||
+    ''
+  ).trim();
+
+  return { url, anonKey };
 }
 
 let supabaseInstance: SupabaseClient | null = null;
