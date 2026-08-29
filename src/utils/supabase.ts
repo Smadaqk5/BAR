@@ -88,10 +88,25 @@ CREATE TABLE IF NOT EXISTS public.portal_settings (
   deposit_address TEXT NOT NULL,
   usdt_contract TEXT NOT NULL,
   tokens_per_usdt INTEGER NOT NULL DEFAULT 1,
+  packages JSONB,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 4. Saved Client Barcode Profiles
+-- 4. Barcode Packages Catalog Table
+CREATE TABLE IF NOT EXISTS public.portal_packages (
+  id TEXT PRIMARY KEY,
+  usdt NUMERIC NOT NULL,
+  tokens INTEGER NOT NULL,
+  label TEXT NOT NULL,
+  bonus TEXT,
+  description TEXT,
+  popular BOOLEAN DEFAULT false,
+  enabled BOOLEAN DEFAULT true,
+  sort_order INTEGER DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 5. Saved Client Barcode Profiles
 CREATE TABLE IF NOT EXISTS public.saved_profiles (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -192,6 +207,99 @@ export const SupabaseService = {
       return !error;
     } catch (err) {
       console.warn('Supabase upsertOrder error:', err);
+      return false;
+    }
+  },
+
+  async fetchPackages(): Promise<any[] | null> {
+    const client = getSupabaseClient();
+    if (!client) return null;
+    try {
+      // 1. Check portal_packages table
+      const { data: pkgData, error: pkgErr } = await client
+        .from('portal_packages')
+        .select('*')
+        .order('sort_order', { ascending: true });
+
+      if (!pkgErr && pkgData && pkgData.length > 0) {
+        return pkgData.map(p => ({
+          id: p.id,
+          usdt: Number(p.usdt),
+          tokens: Number(p.tokens),
+          label: p.label,
+          bonus: p.bonus || undefined,
+          description: p.description || undefined,
+          popular: Boolean(p.popular),
+          enabled: p.enabled !== false
+        }));
+      }
+
+      // 2. Check portal_settings packages column
+      const { data: settingData, error: settingErr } = await client
+        .from('portal_settings')
+        .select('packages')
+        .eq('id', 'global_settings')
+        .maybeSingle();
+
+      if (!settingErr && settingData && Array.isArray(settingData.packages) && settingData.packages.length > 0) {
+        return settingData.packages;
+      }
+
+      return null;
+    } catch (err) {
+      console.warn('Supabase fetchPackages fallback:', err);
+      return null;
+    }
+  },
+
+  async upsertPackages(packages: any[]): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+    try {
+      const formatted = packages.map((p, idx) => ({
+        id: p.id,
+        usdt: p.usdt,
+        tokens: p.tokens,
+        label: p.label,
+        bonus: p.bonus || null,
+        description: p.description || null,
+        popular: Boolean(p.popular),
+        enabled: p.enabled !== false,
+        sort_order: idx,
+        updated_at: new Date().toISOString()
+      }));
+
+      // Try portal_packages table first
+      const { error: pkgErr } = await client
+        .from('portal_packages')
+        .upsert(formatted);
+
+      // Also try portal_settings json
+      await client
+        .from('portal_settings')
+        .upsert({
+          id: 'global_settings',
+          packages: packages,
+          updated_at: new Date().toISOString()
+        });
+
+      return !pkgErr;
+    } catch (err) {
+      console.warn('Supabase upsertPackages fallback warning:', err);
+      return false;
+    }
+  },
+
+  async deleteRemotePackage(pkgId: string): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+    try {
+      await client
+        .from('portal_packages')
+        .delete()
+        .eq('id', pkgId);
+      return true;
+    } catch (err) {
       return false;
     }
   }

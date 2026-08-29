@@ -82,52 +82,6 @@ export const PortalStore = {
         localStorage.setItem(PACKAGES_KEY, JSON.stringify(DEFAULT_PACKAGES));
         return DEFAULT_PACKAGES;
       }
-      // Migrate any legacy 'Token' strings to 'Barcode'
-      let needsSave = false;
-      parsed = parsed.map(p => {
-        if (p.bonus && p.bonus.includes('Token')) {
-          needsSave = true;
-          return { ...p, bonus: p.bonus.replace(/Tokens/g, 'Barcodes').replace(/Token/g, 'Barcode') };
-        }
-        return p;
-      });
-
-      // Ensure Weekly and Monthly packages are included if missing from older sessions
-      const hasWeekly = parsed.some(p => p.id === 'pkg-weekly' || p.label.toLowerCase().includes('weekly'));
-      const hasMonthly = parsed.some(p => p.id === 'pkg-monthly' || p.label.toLowerCase().includes('monthly'));
-      if (!hasWeekly || !hasMonthly) {
-        if (!hasWeekly) {
-          const insertIdx = Math.min(2, parsed.length);
-          parsed.splice(insertIdx, 0, {
-            id: 'pkg-weekly',
-            usdt: 45,
-            tokens: 65,
-            label: 'Weekly Package',
-            popular: true,
-            bonus: 'Weekly Pass (+20 Bonus)',
-            description: 'Best for weekly volume production',
-            enabled: true
-          });
-        }
-        if (!hasMonthly) {
-          const monthlyIdx = parsed.findIndex(p => p.id === 'pkg-4' || p.label.toLowerCase().includes('enterprise'));
-          const insertIdx = monthlyIdx !== -1 ? monthlyIdx : parsed.length;
-          parsed.splice(insertIdx, 0, {
-            id: 'pkg-monthly',
-            usdt: 150,
-            tokens: 260,
-            label: 'Monthly Package',
-            bonus: 'Monthly VIP (+110 Bonus)',
-            description: 'Maximum savings for high-volume monthly issuance',
-            enabled: true
-          });
-        }
-        needsSave = true;
-      }
-
-      if (needsSave) {
-        localStorage.setItem(PACKAGES_KEY, JSON.stringify(parsed));
-      }
       return parsed;
     } catch {
       return DEFAULT_PACKAGES;
@@ -137,6 +91,16 @@ export const PortalStore = {
   savePackages(packages: TokenPackage[]): void {
     try {
       localStorage.setItem(PACKAGES_KEY, JSON.stringify(packages));
+      // Broadcast real-time change event to all active views and components
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bryt_portal_packages_changed', { detail: packages }));
+      }
+      // Persist to Supabase if configured
+      if (isSupabaseConfigured()) {
+        SupabaseService.upsertPackages(packages).catch(err => {
+          console.warn('Supabase packages sync warning:', err);
+        });
+      }
     } catch (e) {
       console.warn('Failed to save packages:', e);
     }
@@ -181,6 +145,9 @@ export const PortalStore = {
       packages = [...DEFAULT_PACKAGES];
     }
     this.savePackages(packages);
+    if (isSupabaseConfigured()) {
+      SupabaseService.deleteRemotePackage(id).catch(console.warn);
+    }
     return packages.length < beforeLen;
   },
 
@@ -641,15 +608,16 @@ export const PortalStore = {
     }
   },
 
-  async syncFromSupabase(): Promise<{ users: User[]; orders: Order[] }> {
+  async syncFromSupabase(): Promise<{ users: User[]; orders: Order[]; packages: TokenPackage[] }> {
     if (!isSupabaseConfigured()) {
-      return { users: this.getAllUsers(), orders: this.getAllOrders() };
+      return { users: this.getAllUsers(), orders: this.getAllOrders(), packages: this.getPackages() };
     }
 
     try {
-      const [remoteUsers, remoteOrders] = await Promise.all([
+      const [remoteUsers, remoteOrders, remotePackages] = await Promise.all([
         SupabaseService.fetchUsers(),
-        SupabaseService.fetchOrders()
+        SupabaseService.fetchOrders(),
+        SupabaseService.fetchPackages()
       ]);
 
       if (remoteUsers && remoteUsers.length > 0) {
@@ -660,13 +628,21 @@ export const PortalStore = {
         this.saveOrders(remoteOrders);
       }
 
+      if (remotePackages && remotePackages.length > 0) {
+        localStorage.setItem(PACKAGES_KEY, JSON.stringify(remotePackages));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('bryt_portal_packages_changed', { detail: remotePackages }));
+        }
+      }
+
       return {
         users: this.getAllUsers(),
-        orders: this.getAllOrders()
+        orders: this.getAllOrders(),
+        packages: this.getPackages()
       };
     } catch (err) {
       console.warn('Supabase auto-sync failed, using local storage fallback:', err);
-      return { users: this.getAllUsers(), orders: this.getAllOrders() };
+      return { users: this.getAllUsers(), orders: this.getAllOrders(), packages: this.getPackages() };
     }
   }
 };

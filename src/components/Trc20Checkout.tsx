@@ -54,7 +54,44 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
   const settings = PortalStore.getSettings();
   const depositAddress = settings.depositAddress;
 
-  // Refresh package list on open
+  // Refresh package list on open and listen to real-time updates
+  React.useEffect(() => {
+    const refreshPackages = () => {
+      const list = PortalStore.getPackages().filter(p => p.enabled !== false);
+      const validList = list.length > 0 ? list : PortalStore.getPackages();
+      setPackages(validList);
+      
+      setSelectedPkg(prev => {
+        const found = validList.find(p => p.id === prev?.id) ||
+                      validList.find(p => p.usdt === prev?.usdt) ||
+                      validList.find(p => p.usdt === initialPackage) ||
+                      validList.find(p => p.popular) ||
+                      validList[0];
+        return found;
+      });
+    };
+
+    refreshPackages();
+
+    const handlePackageUpdate = (e: any) => {
+      if (e?.detail && Array.isArray(e.detail)) {
+        const validList = e.detail.filter((p: TokenPackage) => p.enabled !== false);
+        setPackages(validList.length > 0 ? validList : e.detail);
+      } else {
+        refreshPackages();
+      }
+    };
+
+    window.addEventListener('bryt_portal_packages_changed', handlePackageUpdate);
+    window.addEventListener('storage', refreshPackages);
+
+    return () => {
+      window.removeEventListener('bryt_portal_packages_changed', handlePackageUpdate);
+      window.removeEventListener('storage', refreshPackages);
+    };
+  }, [initialPackage]);
+
+  // Synchronize active order on open or package selection
   React.useEffect(() => {
     if (isOpen) {
       const list = PortalStore.getPackages().filter(p => p.enabled !== false);

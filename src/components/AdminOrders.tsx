@@ -75,6 +75,9 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
       PortalStore.syncFromSupabase().then(res => {
         setOrders(res.orders);
         setUsers(res.users);
+        if (res.packages && res.packages.length > 0) {
+          setPackages(res.packages);
+        }
       }).finally(() => {
         setIsSyncing(false);
       });
@@ -86,6 +89,9 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
     const res = await PortalStore.syncFromSupabase();
     setOrders(res.orders);
     setUsers(res.users);
+    if (res.packages && res.packages.length > 0) {
+      setPackages(res.packages);
+    }
     setIsSyncing(false);
     showToast(isSupabaseConfigured() ? 'Cloud database refreshed!' : 'Local data refreshed');
   };
