@@ -32,7 +32,7 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
   onClose,
   user,
   onBalanceUpdated,
-  initialPackage = 25
+  initialPackage
 }) => {
   const [packages, setPackages] = useState<TokenPackage[]>(() => {
     const list = PortalStore.getPackages().filter(p => p.enabled !== false);
@@ -42,7 +42,9 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
   const [selectedPkg, setSelectedPkg] = useState<TokenPackage>(() => {
     const list = PortalStore.getPackages().filter(p => p.enabled !== false);
     const validList = list.length > 0 ? list : PortalStore.getPackages();
-    return validList.find(p => p.usdt === initialPackage) || validList.find(p => p.popular) || validList[0];
+    return (initialPackage ? validList.find(p => p.usdt === initialPackage) : null) || 
+           validList.find(p => p.popular) || 
+           validList[0];
   });
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [txHash, setTxHash] = useState('');
@@ -64,7 +66,7 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
       setSelectedPkg(prev => {
         const found = validList.find(p => p.id === prev?.id) ||
                       validList.find(p => p.usdt === prev?.usdt) ||
-                      validList.find(p => p.usdt === initialPackage) ||
+                      (initialPackage ? validList.find(p => p.usdt === initialPackage) : null) ||
                       validList.find(p => p.popular) ||
                       validList[0];
         return found;
@@ -77,6 +79,13 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
       if (e?.detail && Array.isArray(e.detail)) {
         const validList = e.detail.filter((p: TokenPackage) => p.enabled !== false);
         setPackages(validList.length > 0 ? validList : e.detail);
+        setSelectedPkg(prev => {
+          const found = validList.find(p => p.id === prev?.id) ||
+                        validList.find(p => p.usdt === prev?.usdt) ||
+                        validList.find(p => p.popular) ||
+                        validList[0];
+          return found;
+        });
       } else {
         refreshPackages();
       }
@@ -99,7 +108,7 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
       setPackages(validList);
       
       const matched = validList.find(p => p.id === selectedPkg?.id) ||
-                      validList.find(p => p.usdt === initialPackage) ||
+                      (initialPackage ? validList.find(p => p.usdt === initialPackage) : null) ||
                       validList.find(p => p.popular) ||
                       validList[0];
       setSelectedPkg(matched);
@@ -272,7 +281,7 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
                         type="button"
                         onClick={() => handleSelectPackage(pkg)}
                         className={`p-3 rounded-xl border text-left transition flex flex-col justify-between relative cursor-pointer ${
-                          selectedPkg.id === pkg.id || (!selectedPkg.id && selectedPkg.usdt === pkg.usdt)
+                          selectedPkg?.id === pkg.id || (!selectedPkg?.id && selectedPkg?.usdt === pkg.usdt)
                             ? 'bg-[#041A10] border-[#FF5C00] shadow-[0_0_12px_rgba(255,92,0,0.25)]'
                             : 'bg-[#041A10]/60 border-[#1A4B36] hover:border-[#1A4B36]/80'
                         }`}
@@ -303,7 +312,7 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
                 <div className="bg-[#041A10] border border-[#1A4B36] rounded-2xl p-5 flex flex-col gap-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono">
-                      2. Send {selectedPkg.usdt} USDT (TRC-20)
+                      2. Send {selectedPkg?.usdt || 20} USDT (TRC-20)
                     </span>
                     <span className="text-[11px] font-mono text-[#FF5C00] bg-[#FF5C00]/10 px-2 py-0.5 rounded border border-[#FF5C00]/30 font-bold">
                       TRON Network
@@ -342,7 +351,7 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
 
                       <div className="flex items-center justify-between text-xs text-[#D5EFE3]/80 font-mono bg-[#082216]/60 p-2.5 rounded-lg border border-[#1A4B36]/60">
                         <span>Required Exact Transfer:</span>
-                        <span className="font-bold text-white">{selectedPkg.usdt}.00 USDT</span>
+                        <span className="font-bold text-white">{selectedPkg?.usdt || 20}.00 USDT</span>
                       </div>
                     </div>
                   </div>

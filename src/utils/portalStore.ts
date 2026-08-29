@@ -8,6 +8,7 @@ const ORDERS_KEY = 'bryt_portal_orders';
 const SETTINGS_KEY = 'bryt_portal_settings';
 const PROFILES_KEY = 'bryt_portal_saved_profiles';
 const PACKAGES_KEY = 'bryt_portal_packages';
+const PACKAGES_VERSION_KEY = 'bryt_portal_packages_catalog_v3';
 
 export interface PortalSettings {
   depositAddress: string;
@@ -72,16 +73,43 @@ export const PortalStore = {
 
   getPackages(): TokenPackage[] {
     try {
-      const raw = localStorage.getItem(PACKAGES_KEY);
-      if (!raw) {
-        localStorage.setItem(PACKAGES_KEY, JSON.stringify(DEFAULT_PACKAGES));
+      const v = typeof localStorage !== 'undefined' ? localStorage.getItem(PACKAGES_VERSION_KEY) : null;
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(PACKAGES_KEY) : null;
+      
+      // If version is missing or legacy version, auto-migrate to latest catalog
+      if (!v || !raw) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(PACKAGES_KEY, JSON.stringify(DEFAULT_PACKAGES));
+          localStorage.setItem(PACKAGES_VERSION_KEY, 'v3_20_50_200_100');
+        }
         return DEFAULT_PACKAGES;
       }
+
       let parsed: TokenPackage[] = JSON.parse(raw);
       if (!Array.isArray(parsed) || parsed.length === 0) {
-        localStorage.setItem(PACKAGES_KEY, JSON.stringify(DEFAULT_PACKAGES));
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(PACKAGES_KEY, JSON.stringify(DEFAULT_PACKAGES));
+          localStorage.setItem(PACKAGES_VERSION_KEY, 'v3_20_50_200_100');
+        }
         return DEFAULT_PACKAGES;
       }
+
+      // Check if user still has legacy prices from older versions (10 USDT Starter or 45 USDT Weekly or 250 USDT Enterprise)
+      const hasLegacyPrices = parsed.some(p => 
+        (p.id === 'pkg-1' && p.usdt === 10) || 
+        (p.id === 'pkg-weekly' && p.usdt === 45) ||
+        (p.id === 'pkg-2' && p.usdt === 25) ||
+        (p.id === 'pkg-4' && p.usdt === 250)
+      );
+
+      if (hasLegacyPrices) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(PACKAGES_KEY, JSON.stringify(DEFAULT_PACKAGES));
+          localStorage.setItem(PACKAGES_VERSION_KEY, 'v3_20_50_200_100');
+        }
+        return DEFAULT_PACKAGES;
+      }
+
       return parsed;
     } catch {
       return DEFAULT_PACKAGES;
@@ -90,7 +118,10 @@ export const PortalStore = {
 
   savePackages(packages: TokenPackage[]): void {
     try {
-      localStorage.setItem(PACKAGES_KEY, JSON.stringify(packages));
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(PACKAGES_KEY, JSON.stringify(packages));
+        localStorage.setItem(PACKAGES_VERSION_KEY, 'v3_20_50_200_100');
+      }
       // Broadcast real-time change event to all active views and components
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('bryt_portal_packages_changed', { detail: packages }));
