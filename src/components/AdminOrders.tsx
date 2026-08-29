@@ -16,11 +16,8 @@ import {
   ArrowLeft, 
   RefreshCw,
   Search,
-  Sliders,
   Check,
   Database,
-  Copy,
-  Code,
   PackagePlus,
   Package,
   Boxes,
@@ -34,14 +31,8 @@ import {
   RotateCcw,
   AlertCircle
 } from 'lucide-react';
-import { PortalStore, PortalSettings } from '../utils/portalStore';
-import { 
-  getSupabaseConfig, 
-  saveSupabaseConfig, 
-  isSupabaseConfigured, 
-  SUPABASE_SQL_SCHEMA,
-  SupabaseService 
-} from '../utils/supabase';
+import { PortalStore } from '../utils/portalStore';
+import { isSupabaseConfigured } from '../utils/supabase';
 import { User, Order, OrderStatus, TokenPackage } from '../types';
 
 interface AdminOrdersProps {
@@ -52,19 +43,9 @@ interface AdminOrdersProps {
 export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, currentUser }) => {
   const [orders, setOrders] = useState<Order[]>(PortalStore.getAllOrders());
   const [users, setUsers] = useState<User[]>(PortalStore.getAllUsers());
-  const [settings, setSettings] = useState<PortalSettings>(PortalStore.getSettings());
   const [packages, setPackages] = useState<TokenPackage[]>(PortalStore.getPackages());
-  const [activeTab, setActiveTab] = useState<'orders' | 'users' | 'packages' | 'settings' | 'supabase'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'users' | 'packages'>('orders');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Address edit state
-  const [editAddress, setEditAddress] = useState(settings.depositAddress);
-  const [editContract, setEditContract] = useState(settings.usdtContract);
-  const [isSavedSettings, setIsSavedSettings] = useState(false);
-
-  // Supabase config state
-  const [supabaseConfig, setSupabaseConfigState] = useState(getSupabaseConfig());
-  const [isSqlCopied, setIsSqlCopied] = useState(false);
 
   // Filter state
   const [orderSearch, setOrderSearch] = useState('');
@@ -258,36 +239,6 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
     }
   };
 
-  const handleSaveSettings = (e: React.FormEvent) => {
-    e.preventDefault();
-    const updated = PortalStore.saveSettings({
-      depositAddress: editAddress.trim(),
-      usdtContract: editContract.trim()
-    });
-    setSettings(updated);
-    setIsSavedSettings(true);
-    showToast('TRC-20 deposit settings updated successfully!');
-    setTimeout(() => setIsSavedSettings(false), 2500);
-  };
-
-  const handleSaveSupabaseConfig = async (e: React.FormEvent) => {
-    e.preventDefault();
-    saveSupabaseConfig(supabaseConfig);
-    setIsSyncing(true);
-    const res = await PortalStore.syncFromSupabase();
-    setOrders(res.orders);
-    setUsers(res.users);
-    setIsSyncing(false);
-    showToast('Supabase configuration saved & cloud sync complete!');
-  };
-
-  const copySqlSchema = () => {
-    navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA.trim());
-    setIsSqlCopied(true);
-    showToast('Supabase SQL Schema copied to clipboard!');
-    setTimeout(() => setIsSqlCopied(false), 2000);
-  };
-
   // Metrics
   const totalUsdt = orders
     .filter(o => o.status === 'approved')
@@ -386,39 +337,26 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
               <span>Token Packages ({packages.length})</span>
             </button>
 
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'settings'
-                  ? 'bg-[#FF5C00] text-white shadow-md'
-                  : 'bg-[#041A10] text-[#D5EFE3] hover:bg-[#103825] border border-[#1A4B36]'
-              }`}
-            >
-              <Sliders className="h-3.5 w-3.5" />
-              <span>TRON Gateway</span>
-            </button>
+            {/* Cloud Sync Status Indicator & Trigger */}
+            <div className="flex items-center gap-2">
+              <div 
+                className="px-2.5 py-1.5 bg-[#041A10] border border-[#1A4B36] rounded-xl flex items-center gap-1.5 text-[11px] font-mono text-[#D5EFE3]"
+                title={isSupabaseConfigured() ? 'Supabase environment variables detected & active' : 'Running on local browser storage'}
+              >
+                <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+                <span className="text-[#D5EFE3]/80">{isSupabaseConfigured() ? 'Cloud DB' : 'Local'}</span>
+              </div>
 
-            <button
-              onClick={() => setActiveTab('supabase')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'supabase'
-                  ? 'bg-[#FF5C00] text-white shadow-md'
-                  : 'bg-[#041A10] text-[#D5EFE3] hover:bg-[#103825] border border-[#1A4B36]'
-              }`}
-            >
-              <Database className="h-3.5 w-3.5 text-emerald-400" />
-              <span>Supabase DB</span>
-            </button>
-
-            <button
-              onClick={refreshData}
-              disabled={isSyncing}
-              className="p-2 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] rounded-xl text-[#D5EFE3] hover:text-white transition cursor-pointer flex items-center gap-1.5 text-xs font-mono disabled:opacity-50"
-              title="Refresh and sync data from cloud database"
-            >
-              <RefreshCw className={`h-4 w-4 text-[#FF5C00] ${isSyncing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : 'Sync Data'}</span>
-            </button>
+              <button
+                onClick={refreshData}
+                disabled={isSyncing}
+                className="p-2 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] rounded-xl text-[#D5EFE3] hover:text-white transition cursor-pointer flex items-center gap-1.5 text-xs font-mono disabled:opacity-50"
+                title="Refresh and sync data"
+              >
+                <RefreshCw className={`h-4 w-4 text-[#FF5C00] ${isSyncing ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : 'Sync'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -426,27 +364,6 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto w-full px-6 py-6 flex-1 flex flex-col gap-6">
         
-        {/* Multi-Device Cloud Sync Guidance Banner if not connected */}
-        {!isSupabaseConfigured() && (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-200 text-xs">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-500/20 rounded-xl text-amber-400">
-                <Database className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="font-bold text-white block">Running in Single-Browser Local Mode</span>
-                <span>Users and orders created in this browser won't be visible on other devices until Supabase Cloud Database is connected.</span>
-              </div>
-            </div>
-            <button
-              onClick={() => setActiveTab('supabase')}
-              className="bg-amber-500 hover:bg-amber-600 text-black font-bold px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer text-xs"
-            >
-              Connect Supabase Now &rarr;
-            </button>
-          </div>
-        )}
-
         {/* KPI Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-4 flex items-center justify-between shadow-sm">
@@ -905,151 +822,6 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                 <span className="font-bold text-white block">Instant Live Synchronization</span>
                 <span>Any additions, price adjustments, or bonus updates will automatically appear in real-time on the client's TRC-20 deposit modal.</span>
               </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* TAB 4: TRON GATEWAY CONFIGURATION */}
-        {activeTab === 'settings' && (
-          <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-6 flex flex-col gap-5 shadow-xl max-w-3xl">
-            <div>
-              <h3 className="text-base font-bold text-white font-sans">TRON (TRC-20) Gateway Settings</h3>
-              <p className="text-xs text-[#D5EFE3]/70 font-sans mt-0.5">
-                Configure your static Binance TRC-20 deposit address and token contract for Tronscan automated verification.
-              </p>
-            </div>
-
-            <form onSubmit={handleSaveSettings} className="flex flex-col gap-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
-                  TRC-20 Deposit Address (Binance / Wallet)
-                </label>
-                <input
-                  type="text"
-                  value={editAddress}
-                  onChange={e => setEditAddress(e.target.value)}
-                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-3 text-xs font-mono outline-none"
-                  required
-                />
-                <p className="text-[11px] text-[#D5EFE3]/50 font-sans mt-1">
-                  Users will send USDT to this address and QR code.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
-                  TRON USDT Contract Address
-                </label>
-                <input
-                  type="text"
-                  value={editContract}
-                  onChange={e => setEditContract(e.target.value)}
-                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-3 text-xs font-mono outline-none"
-                  required
-                />
-                <p className="text-[11px] text-[#D5EFE3]/50 font-sans mt-1">
-                  Default Official TRON USDT: <span className="font-mono text-[#FF5C00]">TR7NHqjekKQxGTCi8q8ZY4pL8otSzgjLj6</span>
-                </p>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  className="bg-[#FF5C00] hover:bg-[#FF731E] text-white font-bold py-3 px-6 rounded-xl transition flex items-center gap-2 cursor-pointer text-sm shadow-md"
-                >
-                  <Save className="h-4 w-4" />
-                  <span>Save Gateway Settings</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* TAB 4: SUPABASE DATABASE MANAGEMENT */}
-        {activeTab === 'supabase' && (
-          <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-6 flex flex-col gap-6 shadow-xl max-w-4xl">
-            <div className="flex items-center justify-between border-b border-[#1A4B36] pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-                  <Database className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white font-sans">Supabase PostgreSQL Integration</h3>
-                  <p className="text-xs text-[#D5EFE3]/70 font-sans">Cloud synchronization for user accounts, TRC-20 orders, and settings</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 bg-[#041A10] border border-[#1A4B36] px-3 py-1.5 rounded-xl text-xs font-mono">
-                <span className={`w-2.5 h-2.5 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                <span className="text-white font-bold">{isSupabaseConfigured() ? 'Cloud Synchronized' : 'Local Fallback'}</span>
-              </div>
-            </div>
-
-            {/* Supabase Configuration Form */}
-            <form onSubmit={handleSaveSupabaseConfig} className="flex flex-col gap-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
-                  Supabase Project URL (VITE_SUPABASE_URL)
-                </label>
-                <input
-                  type="text"
-                  value={supabaseConfig.url}
-                  onChange={e => setSupabaseConfigState({ ...supabaseConfig, url: e.target.value })}
-                  placeholder="https://your-project-id.supabase.co"
-                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-3 text-xs font-mono outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
-                  Supabase Anon API Key (VITE_SUPABASE_ANON_KEY)
-                </label>
-                <input
-                  type="password"
-                  value={supabaseConfig.anonKey}
-                  onChange={e => setSupabaseConfigState({ ...supabaseConfig, anonKey: e.target.value })}
-                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-3 text-xs font-mono outline-none"
-                />
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  className="bg-[#FF5C00] hover:bg-[#FF731E] text-white font-bold py-2.5 px-5 rounded-xl transition flex items-center gap-2 cursor-pointer text-xs shadow-md"
-                >
-                  <Save className="h-4 w-4" />
-                  <span>Save Supabase Credentials</span>
-                </button>
-              </div>
-            </form>
-
-            {/* SQL Migration Script Copy Box */}
-            <div className="bg-[#041A10] border border-[#1A4B36] rounded-2xl p-5 flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Code className="h-4 w-4 text-[#FF5C00]" />
-                  <span className="text-xs font-bold text-white font-mono uppercase">
-                    Supabase SQL Schema & Table Migration
-                  </span>
-                </div>
-                <button
-                  onClick={copySqlSchema}
-                  className="bg-[#082216] hover:bg-[#103825] border border-[#1A4B36] text-white px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer"
-                >
-                  {isSqlCopied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 text-[#FF5C00]" />}
-                  <span>{isSqlCopied ? 'Copied SQL!' : 'Copy SQL Script'}</span>
-                </button>
-              </div>
-
-              <p className="text-[11px] text-[#D5EFE3]/70 font-sans">
-                Paste this script into your Supabase project's <strong>SQL Editor</strong> to create the <code>portal_users</code>, <code>trc20_orders</code>, <code>portal_settings</code>, and <code>saved_profiles</code> tables.
-              </p>
-
-              <pre className="bg-[#020D08] border border-[#1A4B36]/60 rounded-xl p-3 text-[11px] font-mono text-emerald-400/90 overflow-x-auto max-h-48">
-                {SUPABASE_SQL_SCHEMA.trim()}
-              </pre>
             </div>
 
           </div>

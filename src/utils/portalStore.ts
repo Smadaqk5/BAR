@@ -47,19 +47,18 @@ const DEFAULT_USERS: User[] = [
 
 export const PortalStore = {
   getSettings(): PortalSettings {
-    try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      return raw ? JSON.parse(raw) : DEFAULT_SETTINGS;
-    } catch {
-      return DEFAULT_SETTINGS;
-    }
+    const envDepositAddress = (import.meta as any).env?.VITE_TRON_DEPOSIT_ADDRESS?.trim();
+    const envUsdtContract = (import.meta as any).env?.VITE_TRON_USDT_CONTRACT?.trim();
+
+    return {
+      depositAddress: envDepositAddress || DEFAULT_TRON_DEPOSIT_ADDRESS,
+      usdtContract: envUsdtContract || 'TR7NHqjekKQxGTCi8q8ZY4pL8otSzgjLj6',
+      tokensPerUsdt: 1
+    };
   },
 
   saveSettings(settings: Partial<PortalSettings>): PortalSettings {
-    const current = this.getSettings();
-    const updated = { ...current, ...settings };
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
-    return updated;
+    return this.getSettings();
   },
 
   getPackages(): TokenPackage[] {

@@ -3,32 +3,16 @@ import { User, Order, SavedClientProfile } from '../types';
 import { PortalSettings } from './portalStore';
 
 // Supabase environment variables or localStorage overrides
-const SUPABASE_CONFIG_KEY = 'bryt_supabase_config';
-
 export interface SupabaseConfig {
   url: string;
   anonKey: string;
 }
 
 export function getSupabaseConfig(): SupabaseConfig {
-  try {
-    const saved = localStorage.getItem(SUPABASE_CONFIG_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.url && parsed.anonKey) return parsed;
-    }
-  } catch {
-    // Ignore parse errors
-  }
-
   return {
-    url: (import.meta as any).env?.VITE_SUPABASE_URL || '',
-    anonKey: (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || ''
+    url: ((import.meta as any).env?.VITE_SUPABASE_URL || '').trim(),
+    anonKey: ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '').trim()
   };
-}
-
-export function saveSupabaseConfig(config: SupabaseConfig): void {
-  localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify(config));
 }
 
 let supabaseInstance: SupabaseClient | null = null;
