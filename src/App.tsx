@@ -121,6 +121,16 @@ export default function App() {
     }
   }, [savedProfiles, currentUser?.id]);
 
+  // Initial cloud database sync across devices
+  useEffect(() => {
+    PortalStore.syncFromSupabase().then(() => {
+      const refreshed = PortalStore.getCurrentUser();
+      if (refreshed) {
+        setCurrentUser(refreshed);
+      }
+    });
+  }, []);
+
   // Refs
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 

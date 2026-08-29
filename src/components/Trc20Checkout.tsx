@@ -16,7 +16,7 @@ import {
   Wallet
 } from 'lucide-react';
 import { PortalStore } from '../utils/portalStore';
-import { User, Order } from '../types';
+import { User, Order, TokenPackage } from '../types';
 import { isValidTxHash } from '../utils/tronVerifier';
 
 interface Trc20CheckoutProps {
@@ -27,21 +27,6 @@ interface Trc20CheckoutProps {
   initialPackage?: number;
 }
 
-interface TokenPackage {
-  usdt: number;
-  tokens: number;
-  label: string;
-  popular?: boolean;
-  bonus?: string;
-}
-
-const PACKAGES: TokenPackage[] = [
-  { usdt: 10, tokens: 10, label: 'Starter Pack', bonus: '1 USDT = 1 Token' },
-  { usdt: 25, tokens: 30, label: 'Pro Pack', popular: true, bonus: '+5 Bonus Tokens' },
-  { usdt: 50, tokens: 70, label: 'Agency Pack', bonus: '+20 Bonus Tokens' },
-  { usdt: 100, tokens: 150, label: 'Enterprise Pack', bonus: '+50 Bonus Tokens' }
-];
-
 export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
   isOpen,
   onClose,
@@ -49,9 +34,16 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
   onBalanceUpdated,
   initialPackage = 25
 }) => {
-  const [selectedPkg, setSelectedPkg] = useState<TokenPackage>(
-    PACKAGES.find(p => p.usdt === initialPackage) || PACKAGES[1]
-  );
+  const [packages, setPackages] = useState<TokenPackage[]>(() => {
+    const list = PortalStore.getPackages().filter(p => p.enabled !== false);
+    return list.length > 0 ? list : PortalStore.getPackages();
+  });
+
+  const [selectedPkg, setSelectedPkg] = useState<TokenPackage>(() => {
+    const list = PortalStore.getPackages().filter(p => p.enabled !== false);
+    const validList = list.length > 0 ? list : PortalStore.getPackages();
+    return validList.find(p => p.usdt === initialPackage) || validList.find(p => p.popular) || validList[0];
+  });
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [txHash, setTxHash] = useState('');
   const [isCopied, setIsCopied] = useState(false);
@@ -61,6 +53,26 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
 
   const settings = PortalStore.getSettings();
   const depositAddress = settings.depositAddress;
+
+  // Refresh package list on open
+  React.useEffect(() => {
+    if (isOpen) {
+      const list = PortalStore.getPackages().filter(p => p.enabled !== false);
+      const validList = list.length > 0 ? list : PortalStore.getPackages();
+      setPackages(validList);
+      
+      const matched = validList.find(p => p.id === selectedPkg?.id) ||
+                      validList.find(p => p.usdt === initialPackage) ||
+                      validList.find(p => p.popular) ||
+                      validList[0];
+      setSelectedPkg(matched);
+
+      if (matched) {
+        const order = PortalStore.createOrder(user.id, user.email, matched.usdt, matched.tokens);
+        setActiveOrder(order);
+      }
+    }
+  }, [isOpen]);
 
   // Initialize or get order
   const handleSelectPackage = (pkg: TokenPackage) => {
@@ -73,13 +85,6 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
     const newOrder = PortalStore.createOrder(user.id, user.email, pkg.usdt, pkg.tokens);
     setActiveOrder(newOrder);
   };
-
-  React.useEffect(() => {
-    if (isOpen && !activeOrder) {
-      const defaultOrder = PortalStore.createOrder(user.id, user.email, selectedPkg.usdt, selectedPkg.tokens);
-      setActiveOrder(defaultOrder);
-    }
-  }, [isOpen]);
 
   const copyAddress = () => {
     navigator.clipboard.writeText(depositAddress);
@@ -224,31 +229,33 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
                     1. Select Token Package
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {PACKAGES.map(pkg => (
+                    {packages.map(pkg => (
                       <button
-                        key={pkg.usdt}
+                        key={pkg.id || `${pkg.usdt}-${pkg.tokens}`}
                         type="button"
                         onClick={() => handleSelectPackage(pkg)}
                         className={`p-3 rounded-xl border text-left transition flex flex-col justify-between relative cursor-pointer ${
-                          selectedPkg.usdt === pkg.usdt
+                          selectedPkg.id === pkg.id || (!selectedPkg.id && selectedPkg.usdt === pkg.usdt)
                             ? 'bg-[#041A10] border-[#FF5C00] shadow-[0_0_12px_rgba(255,92,0,0.25)]'
                             : 'bg-[#041A10]/60 border-[#1A4B36] hover:border-[#1A4B36]/80'
                         }`}
                       >
                         {pkg.popular && (
-                          <span className="absolute -top-2 right-2 bg-[#FF5C00] text-white text-[9px] font-black px-1.5 py-0.5 rounded font-mono">
+                          <span className="absolute -top-2 right-2 bg-[#FF5C00] text-white text-[9px] font-black px-1.5 py-0.5 rounded font-mono shadow-sm">
                             POPULAR
                           </span>
                         )}
                         <div>
-                          <div className="text-xs font-bold text-white">{pkg.label}</div>
+                          <div className="text-xs font-bold text-white truncate" title={pkg.label}>{pkg.label}</div>
                           <div className="text-lg font-black text-[#FF5C00] mt-0.5 font-mono">
                             {pkg.tokens} <span className="text-xs font-normal text-[#D5EFE3]/70">Tokens</span>
                           </div>
                         </div>
-                        <div className="mt-2 pt-2 border-t border-[#1A4B36]/40 flex items-center justify-between">
-                          <span className="text-xs font-bold text-white font-mono">{pkg.usdt} USDT</span>
-                          <span className="text-[10px] text-emerald-400 font-sans">{pkg.bonus}</span>
+                        <div className="mt-2 pt-2 border-t border-[#1A4B36]/40 flex items-center justify-between gap-1">
+                          <span className="text-xs font-bold text-white font-mono shrink-0">{pkg.usdt} USDT</span>
+                          {pkg.bonus && (
+                            <span className="text-[10px] text-emerald-400 font-sans truncate text-right">{pkg.bonus}</span>
+                          )}
                         </div>
                       </button>
                     ))}

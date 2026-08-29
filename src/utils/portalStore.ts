@@ -1,4 +1,4 @@
-import { User, Order, OrderStatus, SavedClientProfile } from '../types';
+import { User, Order, OrderStatus, SavedClientProfile, TokenPackage } from '../types';
 import { DEFAULT_TRON_DEPOSIT_ADDRESS, verifyTronTransaction } from './tronVerifier';
 import { SupabaseService, isSupabaseConfigured } from './supabase';
 
@@ -7,12 +7,20 @@ const CURRENT_USER_KEY = 'bryt_portal_current_user';
 const ORDERS_KEY = 'bryt_portal_orders';
 const SETTINGS_KEY = 'bryt_portal_settings';
 const PROFILES_KEY = 'bryt_portal_saved_profiles';
+const PACKAGES_KEY = 'bryt_portal_packages';
 
 export interface PortalSettings {
   depositAddress: string;
   usdtContract: string;
   tokensPerUsdt: number;
 }
+
+export const DEFAULT_PACKAGES: TokenPackage[] = [
+  { id: 'pkg-1', usdt: 10, tokens: 10, label: 'Starter Pack', bonus: '1 USDT = 1 Token', enabled: true },
+  { id: 'pkg-2', usdt: 25, tokens: 30, label: 'Pro Pack', popular: true, bonus: '+5 Bonus Tokens', enabled: true },
+  { id: 'pkg-3', usdt: 50, tokens: 70, label: 'Agency Pack', bonus: '+20 Bonus Tokens', enabled: true },
+  { id: 'pkg-4', usdt: 100, tokens: 150, label: 'Enterprise Pack', bonus: '+50 Bonus Tokens', enabled: true }
+];
 
 const DEFAULT_SETTINGS: PortalSettings = {
   depositAddress: DEFAULT_TRON_DEPOSIT_ADDRESS,
@@ -52,6 +60,79 @@ export const PortalStore = {
     const updated = { ...current, ...settings };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
     return updated;
+  },
+
+  getPackages(): TokenPackage[] {
+    try {
+      const raw = localStorage.getItem(PACKAGES_KEY);
+      if (!raw) {
+        localStorage.setItem(PACKAGES_KEY, JSON.stringify(DEFAULT_PACKAGES));
+        return DEFAULT_PACKAGES;
+      }
+      const parsed: TokenPackage[] = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        localStorage.setItem(PACKAGES_KEY, JSON.stringify(DEFAULT_PACKAGES));
+        return DEFAULT_PACKAGES;
+      }
+      return parsed;
+    } catch {
+      return DEFAULT_PACKAGES;
+    }
+  },
+
+  savePackages(packages: TokenPackage[]): void {
+    try {
+      localStorage.setItem(PACKAGES_KEY, JSON.stringify(packages));
+    } catch (e) {
+      console.warn('Failed to save packages:', e);
+    }
+  },
+
+  addPackage(pkg: Omit<TokenPackage, 'id'>): TokenPackage {
+    const packages = this.getPackages();
+    const newPkg: TokenPackage = {
+      ...pkg,
+      id: `pkg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      enabled: pkg.enabled !== undefined ? pkg.enabled : true
+    };
+    if (newPkg.popular) {
+      packages.forEach(p => p.popular = false);
+    }
+    packages.push(newPkg);
+    this.savePackages(packages);
+    return newPkg;
+  },
+
+  updatePackage(id: string, updates: Partial<TokenPackage>): TokenPackage | null {
+    const packages = this.getPackages();
+    const index = packages.findIndex(p => p.id === id);
+    if (index === -1) return null;
+
+    if (updates.popular) {
+      packages.forEach(p => {
+        if (p.id !== id) p.popular = false;
+      });
+    }
+
+    packages[index] = { ...packages[index], ...updates };
+    this.savePackages(packages);
+    return packages[index];
+  },
+
+  deletePackage(id: string): boolean {
+    let packages = this.getPackages();
+    const beforeLen = packages.length;
+    packages = packages.filter(p => p.id !== id);
+    if (packages.length === 0) {
+      packages = [...DEFAULT_PACKAGES];
+    }
+    this.savePackages(packages);
+    return packages.length < beforeLen;
+  },
+
+  resetDefaultPackages(): TokenPackage[] {
+    this.savePackages(DEFAULT_PACKAGES);
+    return DEFAULT_PACKAGES;
   },
 
   getAllUsers(): User[] {
@@ -212,6 +293,10 @@ export const PortalStore = {
     const currentUser = this.getCurrentUser();
     if (currentUser && currentUser.id === userId) {
       this.logout();
+    }
+
+    if (isSupabaseConfigured()) {
+      SupabaseService.deleteUser(userId).catch(console.error);
     }
     return true;
   },
@@ -402,6 +487,35 @@ export const PortalStore = {
       localStorage.removeItem(`${PROFILES_KEY}_${targetUserId}`);
     } catch (e) {
       console.warn('Failed to clear profiles from localStorage:', e);
+    }
+  },
+
+  async syncFromSupabase(): Promise<{ users: User[]; orders: Order[] }> {
+    if (!isSupabaseConfigured()) {
+      return { users: this.getAllUsers(), orders: this.getAllOrders() };
+    }
+
+    try {
+      const [remoteUsers, remoteOrders] = await Promise.all([
+        SupabaseService.fetchUsers(),
+        SupabaseService.fetchOrders()
+      ]);
+
+      if (remoteUsers && remoteUsers.length > 0) {
+        this.saveUsers(remoteUsers);
+      }
+
+      if (remoteOrders && remoteOrders.length > 0) {
+        this.saveOrders(remoteOrders);
+      }
+
+      return {
+        users: this.getAllUsers(),
+        orders: this.getAllOrders()
+      };
+    } catch (err) {
+      console.warn('Supabase auto-sync failed, using local storage fallback:', err);
+      return { users: this.getAllUsers(), orders: this.getAllOrders() };
     }
   }
 };

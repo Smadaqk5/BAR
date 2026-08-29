@@ -77,6 +77,17 @@ export interface SavedClientProfile {
   userId?: string;
 }
 
+export interface TokenPackage {
+  id: string;
+  usdt: number;
+  tokens: number;
+  label: string;
+  popular?: boolean;
+  bonus?: string;
+  description?: string;
+  enabled?: boolean;
+}
+
 export interface TronVerifyResult {
   valid: boolean;
   amountReceived: number;

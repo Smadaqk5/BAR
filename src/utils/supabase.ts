@@ -153,6 +153,21 @@ export const SupabaseService = {
     }
   },
 
+  async deleteUser(userId: string): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) return false;
+    try {
+      const { error } = await client
+        .from('portal_users')
+        .delete()
+        .eq('id', userId);
+      return !error;
+    } catch (err) {
+      console.warn('Supabase deleteUser error:', err);
+      return false;
+    }
+  },
+
   async fetchOrders(): Promise<Order[] | null> {
     const client = getSupabaseClient();
     if (!client) return null;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Shield, 
   Users, 
@@ -20,7 +20,19 @@ import {
   Check,
   Database,
   Copy,
-  Code
+  Code,
+  PackagePlus,
+  Package,
+  Boxes,
+  Layers,
+  Tag,
+  Star,
+  Sparkles,
+  X,
+  ToggleLeft,
+  ToggleRight,
+  RotateCcw,
+  AlertCircle
 } from 'lucide-react';
 import { PortalStore, PortalSettings } from '../utils/portalStore';
 import { 
@@ -30,7 +42,7 @@ import {
   SUPABASE_SQL_SCHEMA,
   SupabaseService 
 } from '../utils/supabase';
-import { User, Order, OrderStatus } from '../types';
+import { User, Order, OrderStatus, TokenPackage } from '../types';
 
 interface AdminOrdersProps {
   onBackToPortal: () => void;
@@ -41,7 +53,8 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
   const [orders, setOrders] = useState<Order[]>(PortalStore.getAllOrders());
   const [users, setUsers] = useState<User[]>(PortalStore.getAllUsers());
   const [settings, setSettings] = useState<PortalSettings>(PortalStore.getSettings());
-  const [activeTab, setActiveTab] = useState<'orders' | 'users' | 'settings' | 'supabase'>('orders');
+  const [packages, setPackages] = useState<TokenPackage[]>(PortalStore.getPackages());
+  const [activeTab, setActiveTab] = useState<'orders' | 'users' | 'packages' | 'settings' | 'supabase'>('orders');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Address edit state
@@ -56,16 +69,44 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
   // Filter state
   const [orderSearch, setOrderSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Package modal & form state
+  const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
+  const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
+  const [pkgLabel, setPkgLabel] = useState('');
+  const [pkgUsdt, setPkgUsdt] = useState<number>(25);
+  const [pkgTokens, setPkgTokens] = useState<number>(30);
+  const [pkgBonus, setPkgBonus] = useState('');
+  const [pkgPopular, setPkgPopular] = useState(false);
+  const [pkgDescription, setPkgDescription] = useState('');
+  const [pkgEnabled, setPkgEnabled] = useState(true);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const refreshData = () => {
-    setOrders(PortalStore.getAllOrders());
-    setUsers(PortalStore.getAllUsers());
-    showToast('Data refreshed');
+  // Automatically sync with cloud database on load
+  useEffect(() => {
+    if (isSupabaseConfigured()) {
+      setIsSyncing(true);
+      PortalStore.syncFromSupabase().then(res => {
+        setOrders(res.orders);
+        setUsers(res.users);
+      }).finally(() => {
+        setIsSyncing(false);
+      });
+    }
+  }, []);
+
+  const refreshData = async () => {
+    setIsSyncing(true);
+    const res = await PortalStore.syncFromSupabase();
+    setOrders(res.orders);
+    setUsers(res.users);
+    setIsSyncing(false);
+    showToast(isSupabaseConfigured() ? 'Cloud database refreshed!' : 'Local data refreshed');
   };
 
   const handleForceApprove = (orderId: string) => {
@@ -119,6 +160,104 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
     }
   };
 
+  // Package Management Handlers
+  const handleOpenCreatePackage = () => {
+    setEditingPackageId(null);
+    setPkgLabel('');
+    setPkgUsdt(25);
+    setPkgTokens(30);
+    setPkgBonus('+5 Bonus Tokens');
+    setPkgPopular(false);
+    setPkgDescription('');
+    setPkgEnabled(true);
+    setIsPackageModalOpen(true);
+  };
+
+  const handleOpenEditPackage = (pkg: TokenPackage) => {
+    setEditingPackageId(pkg.id);
+    setPkgLabel(pkg.label);
+    setPkgUsdt(pkg.usdt);
+    setPkgTokens(pkg.tokens);
+    setPkgBonus(pkg.bonus || '');
+    setPkgPopular(Boolean(pkg.popular));
+    setPkgDescription(pkg.description || '');
+    setPkgEnabled(pkg.enabled !== false);
+    setIsPackageModalOpen(true);
+  };
+
+  const handleSavePackage = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanLabel = pkgLabel.trim();
+    if (!cleanLabel) {
+      showToast('Please enter a package title.');
+      return;
+    }
+
+    const usdtVal = Math.max(1, Number(pkgUsdt) || 1);
+    const tokensVal = Math.max(1, Number(pkgTokens) || 1);
+
+    if (editingPackageId) {
+      PortalStore.updatePackage(editingPackageId, {
+        label: cleanLabel,
+        usdt: usdtVal,
+        tokens: tokensVal,
+        bonus: pkgBonus.trim() || undefined,
+        popular: pkgPopular,
+        description: pkgDescription.trim() || undefined,
+        enabled: pkgEnabled
+      });
+      showToast(`Updated package "${cleanLabel}"`);
+    } else {
+      PortalStore.addPackage({
+        label: cleanLabel,
+        usdt: usdtVal,
+        tokens: tokensVal,
+        bonus: pkgBonus.trim() || undefined,
+        popular: pkgPopular,
+        description: pkgDescription.trim() || undefined,
+        enabled: pkgEnabled
+      });
+      showToast(`Created new package "${cleanLabel}"`);
+    }
+
+    setPackages(PortalStore.getPackages());
+    setIsPackageModalOpen(false);
+  };
+
+  const handleDeletePackage = (pkgId: string, label: string) => {
+    if (packages.length <= 1) {
+      alert('You must have at least one active package.');
+      return;
+    }
+    if (confirm(`Are you sure you want to delete the package "${label}"?`)) {
+      PortalStore.deletePackage(pkgId);
+      setPackages(PortalStore.getPackages());
+      showToast(`Deleted package "${label}"`);
+    }
+  };
+
+  const handleTogglePackageEnabled = (pkg: TokenPackage) => {
+    const nextState = pkg.enabled === false ? true : false;
+    PortalStore.updatePackage(pkg.id, { enabled: nextState });
+    setPackages(PortalStore.getPackages());
+    showToast(`${nextState ? 'Enabled' : 'Disabled'} package "${pkg.label}"`);
+  };
+
+  const handleTogglePopular = (pkg: TokenPackage) => {
+    const nextPopular = !pkg.popular;
+    PortalStore.updatePackage(pkg.id, { popular: nextPopular });
+    setPackages(PortalStore.getPackages());
+    showToast(nextPopular ? `Marked "${pkg.label}" as POPULAR` : `Removed popular badge from "${pkg.label}"`);
+  };
+
+  const handleResetPackages = () => {
+    if (confirm('Reset all token packages to official system defaults?')) {
+      const reset = PortalStore.resetDefaultPackages();
+      setPackages(reset);
+      showToast('Reset to default token packages.');
+    }
+  };
+
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     const updated = PortalStore.saveSettings({
@@ -131,10 +270,15 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
     setTimeout(() => setIsSavedSettings(false), 2500);
   };
 
-  const handleSaveSupabaseConfig = (e: React.FormEvent) => {
+  const handleSaveSupabaseConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     saveSupabaseConfig(supabaseConfig);
-    showToast('Supabase configuration saved!');
+    setIsSyncing(true);
+    const res = await PortalStore.syncFromSupabase();
+    setOrders(res.orders);
+    setUsers(res.users);
+    setIsSyncing(false);
+    showToast('Supabase configuration saved & cloud sync complete!');
   };
 
   const copySqlSchema = () => {
@@ -231,6 +375,18 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
             </button>
 
             <button
+              onClick={() => setActiveTab('packages')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'packages'
+                  ? 'bg-[#FF5C00] text-white shadow-md'
+                  : 'bg-[#041A10] text-[#D5EFE3] hover:bg-[#103825] border border-[#1A4B36]'
+              }`}
+            >
+              <PackagePlus className="h-3.5 w-3.5" />
+              <span>Token Packages ({packages.length})</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('settings')}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'settings'
@@ -256,10 +412,12 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
 
             <button
               onClick={refreshData}
-              className="p-2 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] rounded-xl text-[#D5EFE3] hover:text-white transition cursor-pointer"
-              title="Refresh Data"
+              disabled={isSyncing}
+              className="p-2 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] rounded-xl text-[#D5EFE3] hover:text-white transition cursor-pointer flex items-center gap-1.5 text-xs font-mono disabled:opacity-50"
+              title="Refresh and sync data from cloud database"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className={`h-4 w-4 text-[#FF5C00] ${isSyncing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : 'Sync Data'}</span>
             </button>
           </div>
         </div>
@@ -268,6 +426,27 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto w-full px-6 py-6 flex-1 flex flex-col gap-6">
         
+        {/* Multi-Device Cloud Sync Guidance Banner if not connected */}
+        {!isSupabaseConfigured() && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-200 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500/20 rounded-xl text-amber-400">
+                <Database className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="font-bold text-white block">Running in Single-Browser Local Mode</span>
+                <span>Users and orders created in this browser won't be visible on other devices until Supabase Cloud Database is connected.</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab('supabase')}
+              className="bg-amber-500 hover:bg-amber-600 text-black font-bold px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer text-xs"
+            >
+              Connect Supabase Now &rarr;
+            </button>
+          </div>
+        )}
+
         {/* KPI Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-4 flex items-center justify-between shadow-sm">
@@ -549,7 +728,189 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
           </div>
         )}
 
-        {/* TAB 3: TRON GATEWAY CONFIGURATION */}
+        {/* TAB 3: TOKEN PACKAGES MANAGEMENT */}
+        {activeTab === 'packages' && (
+          <div className="flex flex-col gap-6">
+            
+            {/* Header and Quick Actions */}
+            <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+              <div>
+                <h3 className="text-base font-bold text-white font-sans flex items-center gap-2">
+                  <Boxes className="h-5 w-5 text-[#FF5C00]" />
+                  <span>Token Packages & Pricing Gateway</span>
+                </h3>
+                <p className="text-xs text-[#D5EFE3]/70 font-sans mt-0.5">
+                  Configure token bundles, USDT rates, bonus tiers, and featured packages available for clients during checkout.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleResetPackages}
+                  className="px-3 py-2 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-xl text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  title="Reset to default packages"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>Reset Defaults</span>
+                </button>
+
+                <button
+                  onClick={handleOpenCreatePackage}
+                  className="px-4 py-2 bg-[#FF5C00] hover:bg-[#FF731E] text-white rounded-xl text-xs font-bold font-sans transition flex items-center gap-2 cursor-pointer shadow-md active:scale-95"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>+ Add New Package</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Packages Summary Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-[#082216]/90 border border-[#1A4B36] rounded-xl p-3.5 flex flex-col">
+                <span className="text-[10px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Total Bundles</span>
+                <span className="text-xl font-black text-white font-mono mt-1">{packages.length}</span>
+              </div>
+              <div className="bg-[#082216]/90 border border-[#1A4B36] rounded-xl p-3.5 flex flex-col">
+                <span className="text-[10px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Live in Checkout</span>
+                <span className="text-xl font-black text-emerald-400 font-mono mt-1">
+                  {packages.filter(p => p.enabled !== false).length}
+                </span>
+              </div>
+              <div className="bg-[#082216]/90 border border-[#1A4B36] rounded-xl p-3.5 flex flex-col">
+                <span className="text-[10px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Featured Package</span>
+                <span className="text-xs font-bold text-[#FF5C00] truncate mt-1.5">
+                  {packages.find(p => p.popular)?.label || 'None set'}
+                </span>
+              </div>
+              <div className="bg-[#082216]/90 border border-[#1A4B36] rounded-xl p-3.5 flex flex-col">
+                <span className="text-[10px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Entry USDT Level</span>
+                <span className="text-xl font-black text-[#D5EFE3] font-mono mt-1">
+                  {Math.min(...packages.map(p => p.usdt))} USDT
+                </span>
+              </div>
+            </div>
+
+            {/* Packages Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {packages.map(pkg => {
+                const ratio = (pkg.tokens / pkg.usdt).toFixed(2);
+                const isEnabled = pkg.enabled !== false;
+
+                return (
+                  <div
+                    key={pkg.id}
+                    className={`bg-[#082216] border rounded-2xl p-5 flex flex-col justify-between relative transition shadow-md ${
+                      pkg.popular 
+                        ? 'border-[#FF5C00] shadow-[0_0_15px_rgba(255,92,0,0.2)]' 
+                        : isEnabled ? 'border-[#1A4B36]' : 'border-[#1A4B36]/40 opacity-70'
+                    }`}
+                  >
+                    {/* Header Badges */}
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-1.5">
+                        {pkg.popular && (
+                          <span className="bg-[#FF5C00] text-white text-[9px] font-black px-2 py-0.5 rounded font-mono flex items-center gap-1 shadow-sm">
+                            <Star className="h-2.5 w-2.5 fill-current" />
+                            POPULAR
+                          </span>
+                        )}
+                        <span
+                          className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase border ${
+                            isEnabled 
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' 
+                              : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                          }`}
+                        >
+                          {isEnabled ? 'Active' : 'Disabled'}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => handleTogglePopular(pkg)}
+                        className={`p-1 rounded hover:bg-[#103825] transition cursor-pointer ${
+                          pkg.popular ? 'text-[#FF5C00]' : 'text-[#D5EFE3]/40 hover:text-white'
+                        }`}
+                        title={pkg.popular ? 'Remove Popular badge' : 'Set as Popular badge'}
+                      >
+                        <Star className={`h-4 w-4 ${pkg.popular ? 'fill-current' : ''}`} />
+                      </button>
+                    </div>
+
+                    {/* Main Package Details */}
+                    <div>
+                      <h4 className="text-sm font-bold text-white font-sans">{pkg.label}</h4>
+                      
+                      <div className="mt-2 flex items-baseline gap-1.5 font-mono">
+                        <span className="text-3xl font-black text-[#FF5C00]">{pkg.tokens}</span>
+                        <span className="text-xs text-[#D5EFE3]/70 font-sans font-bold">Tokens</span>
+                      </div>
+
+                      <div className="mt-2 pt-2 border-t border-[#1A4B36]/60 flex items-center justify-between text-xs font-mono">
+                        <span className="text-white font-bold">{pkg.usdt} USDT</span>
+                        <span className="text-[11px] text-emerald-400 font-sans font-bold">{pkg.bonus || `1 USDT = ${ratio} T`}</span>
+                      </div>
+
+                      {pkg.description && (
+                        <p className="text-[11px] text-[#D5EFE3]/60 font-sans mt-2 line-clamp-2">
+                          {pkg.description}
+                        </p>
+                      )}
+
+                      <div className="mt-2 text-[10px] font-mono text-[#D5EFE3]/50 bg-[#041A10] p-1.5 rounded border border-[#1A4B36]/40">
+                        Effective: {ratio} tokens per 1 USDT
+                      </div>
+                    </div>
+
+                    {/* Card Actions Footer */}
+                    <div className="mt-4 pt-3 border-t border-[#1A4B36] flex items-center justify-between gap-1.5">
+                      <button
+                        onClick={() => handleOpenEditPackage(pkg)}
+                        className="px-2.5 py-1.5 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer flex-1 justify-center"
+                      >
+                        <Edit3 className="h-3 w-3 text-[#FF5C00]" />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleTogglePackageEnabled(pkg)}
+                        className={`p-1.5 rounded-lg border text-xs transition cursor-pointer ${
+                          isEnabled 
+                            ? 'bg-emerald-950/60 hover:bg-emerald-900/60 border-emerald-500/40 text-emerald-300' 
+                            : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 text-zinc-400'
+                        }`}
+                        title={isEnabled ? 'Disable in checkout' : 'Enable in checkout'}
+                      >
+                        {isEnabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+                      </button>
+
+                      <button
+                        onClick={() => handleDeletePackage(pkg.id, pkg.label)}
+                        className="p-1.5 bg-red-950/60 hover:bg-red-800 border border-red-500/30 text-red-300 rounded-lg text-xs transition cursor-pointer"
+                        title="Delete package"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Live Client Preview Note */}
+            <div className="bg-[#041A10] border border-[#1A4B36] rounded-2xl p-4 flex items-center gap-3 text-xs text-[#D5EFE3]/80">
+              <div className="p-2 bg-[#FF5C00]/20 text-[#FF5C00] rounded-xl shrink-0">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <span className="font-bold text-white block">Instant Live Synchronization</span>
+                <span>Any additions, price adjustments, or bonus updates will automatically appear in real-time on the client's TRC-20 deposit modal.</span>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* TAB 4: TRON GATEWAY CONFIGURATION */}
         {activeTab === 'settings' && (
           <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-6 flex flex-col gap-5 shadow-xl max-w-3xl">
             <div>
@@ -695,6 +1056,251 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
         )}
 
       </main>
+
+      {/* PACKAGE ADD / EDIT MODAL */}
+      {isPackageModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#082216] border border-[#1A4B36] rounded-3xl w-full max-w-xl p-6 flex flex-col gap-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#1A4B36] pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#FF5C00]/20 text-[#FF5C00] flex items-center justify-center border border-[#FF5C00]/30">
+                  <PackagePlus className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white font-sans">
+                    {editingPackageId ? 'Edit Token Package' : 'Create New Token Package'}
+                  </h3>
+                  <p className="text-xs text-[#D5EFE3]/70 font-sans">
+                    Define token allocation and USDT deposit pricing
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsPackageModalOpen(false)}
+                className="text-[#D5EFE3]/60 hover:text-white p-1 rounded-lg hover:bg-[#103825] transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSavePackage} className="flex flex-col gap-4">
+              
+              {/* Package Title / Label */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
+                  Package Name / Title *
+                </label>
+                <input
+                  type="text"
+                  value={pkgLabel}
+                  onChange={e => setPkgLabel(e.target.value)}
+                  placeholder="e.g. Starter Pack, Pro Tier, VIP Gold"
+                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-2.5 text-xs font-mono outline-none"
+                  required
+                />
+              </div>
+
+              {/* Pricing & Tokens Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
+                    Price (USDT TRC-20) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={pkgUsdt}
+                      onChange={e => {
+                        const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                        setPkgUsdt(val);
+                      }}
+                      className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-2.5 text-xs font-mono outline-none pl-8"
+                      required
+                    />
+                    <span className="absolute left-3 top-2.5 text-xs font-mono text-[#D5EFE3]/60">$</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
+                    Tokens Credited *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={pkgTokens}
+                    onChange={e => {
+                      const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                      setPkgTokens(val);
+                    }}
+                    className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-2.5 text-xs font-mono outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Quick Multipliers */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-mono text-[#D5EFE3]/60 mr-1">Quick Rates:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPkgTokens(pkgUsdt);
+                    setPkgBonus('1 USDT = 1 Token');
+                  }}
+                  className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
+                >
+                  1:1 (Standard)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = Math.round(pkgUsdt * 1.2);
+                    setPkgTokens(t);
+                    setPkgBonus(`+${t - pkgUsdt} Bonus Tokens`);
+                  }}
+                  className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
+                >
+                  +20% Bonus
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = Math.round(pkgUsdt * 1.5);
+                    setPkgTokens(t);
+                    setPkgBonus(`+${t - pkgUsdt} Bonus Tokens`);
+                  }}
+                  className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
+                >
+                  +50% Bonus
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = pkgUsdt * 2;
+                    setPkgTokens(t);
+                    setPkgBonus('2x Token Multiplier');
+                  }}
+                  className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
+                >
+                  2x Tokens
+                </button>
+              </div>
+
+              {/* Bonus / Subtitle Tag */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
+                  Bonus Tag / Promo Badge (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={pkgBonus}
+                  onChange={e => setPkgBonus(e.target.value)}
+                  placeholder="e.g. +5 Bonus Tokens, Best Value, 20% Off"
+                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-2.5 text-xs font-mono outline-none"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
+                  Short Description (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={pkgDescription}
+                  onChange={e => setPkgDescription(e.target.value)}
+                  placeholder="e.g. Perfect for regular identity search & verification workflows"
+                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-2.5 text-xs font-sans outline-none"
+                />
+              </div>
+
+              {/* Toggles */}
+              <div className="bg-[#041A10] border border-[#1A4B36] rounded-xl p-3.5 flex flex-col sm:flex-row gap-4 justify-between">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-white">
+                  <input
+                    type="checkbox"
+                    checked={pkgPopular}
+                    onChange={e => setPkgPopular(e.target.checked)}
+                    className="accent-[#FF5C00] w-4 h-4 rounded cursor-pointer"
+                  />
+                  <div className="flex flex-col">
+                    <span className="font-bold flex items-center gap-1">
+                      <Star className="h-3 w-3 text-[#FF5C00] fill-current" />
+                      Highlight as "POPULAR"
+                    </span>
+                    <span className="text-[10px] text-[#D5EFE3]/50">Show orange top ribbon in checkout</span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-white">
+                  <input
+                    type="checkbox"
+                    checked={pkgEnabled}
+                    onChange={e => setPkgEnabled(e.target.checked)}
+                    className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
+                  />
+                  <div className="flex flex-col">
+                    <span className="font-bold">Active in Checkout</span>
+                    <span className="text-[10px] text-[#D5EFE3]/50">Make visible to purchasing clients</span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Live Preview Box */}
+              <div>
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-[#D5EFE3]/60 font-mono mb-1.5">
+                  Live Client Card Preview:
+                </span>
+                <div className="bg-[#041A10] border border-[#FF5C00] shadow-[0_0_12px_rgba(255,92,0,0.25)] rounded-xl p-3 max-w-xs relative">
+                  {pkgPopular && (
+                    <span className="absolute -top-2 right-2 bg-[#FF5C00] text-white text-[9px] font-black px-1.5 py-0.5 rounded font-mono">
+                      POPULAR
+                    </span>
+                  )}
+                  <div className="text-xs font-bold text-white">{pkgLabel || 'Package Title'}</div>
+                  <div className="text-lg font-black text-[#FF5C00] mt-0.5 font-mono">
+                    {pkgTokens || 0} <span className="text-xs font-normal text-[#D5EFE3]/70">Tokens</span>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-[#1A4B36]/40 flex items-center justify-between">
+                    <span className="text-xs font-bold text-white font-mono">{pkgUsdt || 0} USDT</span>
+                    <span className="text-[10px] text-emerald-400 font-sans">{pkgBonus || 'Bonus'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Action Buttons */}
+              <div className="border-t border-[#1A4B36] pt-4 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsPackageModalOpen(false)}
+                  className="px-4 py-2.5 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] rounded-xl text-xs font-bold font-sans transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-[#FF5C00] hover:bg-[#FF731E] text-white rounded-xl text-xs font-bold font-sans transition flex items-center gap-2 cursor-pointer shadow-md"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>{editingPackageId ? 'Update Package' : 'Create Package'}</span>
+                </button>
+              </div>
+
+            </form>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
