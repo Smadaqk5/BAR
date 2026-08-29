@@ -493,9 +493,9 @@ export default function App() {
   const generateBarcode = () => {
     setValidationError('');
 
-    // Check token balance
+    // Check barcode balance
     if (!currentUser || currentUser.token_balance <= 0) {
-      setValidationError('⚡ Insufficient Tokens: You need at least 1 token to generate a PDF417 barcode. Please top up your balance with a TRC-20 USDT deposit.');
+      setValidationError('⚡ Insufficient Barcodes: You need at least 1 barcode credit to generate. Please top up your balance with a TRC-20 USDT deposit.');
       setShowCheckoutModal(true);
       return;
     }
@@ -507,7 +507,7 @@ export default function App() {
       if (canvasRef.current) {
         renderBarcode(aamvaString, true);
 
-        // Deduct 1 token from user balance
+        // Deduct 1 barcode from user balance
         const updatedUser = PortalStore.updateUserTokens(currentUser.id, -1, true);
         if (updatedUser) {
           setCurrentUser(updatedUser);
@@ -532,7 +532,7 @@ export default function App() {
         };
 
         setSavedProfiles(prev => [newProfile, ...prev]);
-        setToastMessage(`⚡ Barcode generated & saved! 1 Token deducted. (Remaining: ${updatedUser ? updatedUser.token_balance : currentUser.token_balance - 1} Tokens)`);
+        setToastMessage(`⚡ Barcode generated & saved! 1 Barcode deducted. (Remaining: ${updatedUser ? updatedUser.token_balance : currentUser.token_balance - 1} Barcodes)`);
         setTimeout(() => setToastMessage(null), 4500);
       } else {
         setValidationError('Canvas node was not mounted yet. Please try again.');
@@ -702,27 +702,36 @@ export default function App() {
                   Client Portal
                 </span>
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <span className="text-[9px] bg-[#041A10] border border-emerald-500/30 px-1.5 py-0.5 rounded text-emerald-400 font-mono font-bold">CDS v10.4</span>
-                <span className="text-[9px] text-[#D5EFE3]/60 font-mono">
-                  Account: <strong className="text-white font-sans">{currentUser.email}</strong>
-                </span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(currentUser.id);
+                    setToastMessage(`Copied ID: ${currentUser.id}`);
+                  }}
+                  className="text-[9px] bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white px-2 py-0.5 rounded font-mono font-bold transition flex items-center gap-1 cursor-pointer"
+                  title="Click to copy your unique ID"
+                >
+                  <span className="text-[#D5EFE3]/60">ID:</span>
+                  <span className="text-[#FF5C00]">{currentUser.id}</span>
+                  <Copy className="h-2.5 w-2.5 text-[#D5EFE3]/50" />
+                </button>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
-            {/* Token Balance Indicator */}
+            {/* Barcode Balance Indicator */}
             <button
               onClick={() => setShowCheckoutModal(true)}
               className="flex items-center gap-2 px-3.5 py-1.5 bg-[#08281B] hover:bg-[#0E3827] border border-[#1A4B36] rounded-xl text-white transition cursor-pointer shadow-xs group"
-              title="Click to buy tokens with USDT"
+              title="Click to buy barcodes with USDT"
             >
               <div className="w-5 h-5 rounded-full bg-[#FF5C00]/20 flex items-center justify-center text-[#FF5C00] group-hover:scale-110 transition">
                 <Coins className="h-3.5 w-3.5" />
               </div>
               <span className="text-xs font-mono font-black text-[#FF5C00]">
-                {currentUser.token_balance} <span className="text-[10px] font-sans font-medium text-[#D5EFE3]/80">Tokens</span>
+                {currentUser.token_balance} <span className="text-[10px] font-sans font-medium text-[#D5EFE3]/80">Barcodes</span>
               </span>
               <span className="text-[10px] bg-[#FF5C00] text-white px-1.5 py-0.5 rounded font-bold uppercase">
                 + Deposit
@@ -1342,7 +1351,7 @@ export default function App() {
           <div className="bg-[#FAF7EC] border border-[#0B2519]/15 rounded-xl p-5 flex flex-col gap-4 shadow-lg text-[#0A2A1A]">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black text-[#0B2519]/70 uppercase tracking-widest font-mono">
-                PDF417 Standard Output
+                Barcode Standard Output
               </h3>
               {previewImageUrl && (
                 <span className="text-[9px] bg-[#FFE6D5] text-[#FF5C00] font-bold px-2 py-0.5 rounded-full border border-[#FF5C00]/30 flex items-center gap-1">
@@ -1380,7 +1389,7 @@ export default function App() {
               {previewImageUrl ? (
                 <img 
                   src={previewImageUrl} 
-                  alt="AAMVA PDF417 Barcode Output" 
+                  alt="AAMVA Barcode Output" 
                   className="w-full max-h-[220px] object-contain cursor-crosshair select-all block"
                   id="barcode-image-output"
                   referrerPolicy="no-referrer"
@@ -1409,14 +1418,14 @@ export default function App() {
             </div>
           </div>
 
-          {/* Generate PDF 17 Barcode ACTION Button */}
+          {/* Generate Barcode ACTION Button */}
           <button
             onClick={generateBarcode}
             id="btn-generate"
             className="w-full py-4 bg-[#FF5C00] hover:bg-[#FF731E] text-white font-black uppercase text-xs tracking-[0.2em] rounded shadow-[0_4px_24px_rgba(255,92,0,0.35)] transition-all cursor-pointer active:scale-[0.98] flex items-center justify-center gap-2"
           >
             <Sparkles className="h-4 w-4 text-white animate-pulse" />
-            <span>Generate PDF 17 Barcode</span>
+            <span>Generate Barcode</span>
           </button>
 
         </div>
@@ -1427,7 +1436,7 @@ export default function App() {
       <footer className="py-4 bg-[#03130C] border-t border-[#0B2D1C] text-center select-none shrink-0 mt-auto">
         <div className="px-6 flex flex-col md:flex-row items-center justify-between gap-2 max-w-7xl mx-auto text-emerald-500/60 font-mono text-[9px] tracking-wide uppercase font-semibold">
           <span>Bryt Barcode Tec • AAMVA Standard 2026</span>
-          <span>Secure Client-Side Engine • Compliant Standard PDF417</span>
+          <span>Secure Client-Side Engine • Compliant Standard Barcode</span>
         </div>
       </footer>
 
@@ -1466,13 +1475,13 @@ export default function App() {
                   <div className="w-full bg-white p-2 rounded-xl flex items-center justify-center border border-[#0B2519]/25 shadow-xs overflow-hidden relative group">
                     <img
                       src={previewImageUrl}
-                      alt="Compiled PDF417 Barcode"
+                      alt="Compiled Barcode"
                       className="w-full max-h-[180px] object-contain cursor-zoom-in block"
                       referrerPolicy="no-referrer"
                     />
                   </div>
                   <p className="text-[10px] text-[#0B2519]/60 font-mono text-center font-bold">
-                    💡 This standard high-resolution PDF417 contains all structured demographic fields configured under the AAMVA v09/v10 Specification.
+                    💡 This standard high-resolution barcode contains all structured demographic fields configured under the AAMVA v09/v10 Specification.
                   </p>
                 </div>
 

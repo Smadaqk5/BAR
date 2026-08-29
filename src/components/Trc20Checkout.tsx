@@ -154,10 +154,10 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-bold text-white font-sans">
-                  TRC-20 USDT Token Deposit
+                  TRC-20 USDT Barcode Deposit
                 </h3>
                 <p className="text-xs text-[#D5EFE3]/70 font-sans">
-                  Instant automated credit via Tronscan verification
+                  Instant automated barcode credit via Tronscan verification
                 </p>
               </div>
             </div>
@@ -183,7 +183,7 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
                     Payment Verified Successfully!
                   </h4>
                   <p className="text-sm text-emerald-300 font-sans mt-1">
-                    Successfully credited <span className="font-bold text-white">+{verificationSuccess.tokens_to_credit} Tokens</span> to your account balance.
+                    Successfully credited <span className="font-bold text-white">+{verificationSuccess.tokens_to_credit} Barcodes</span> to your account balance.
                   </p>
                 </div>
 
@@ -197,8 +197,8 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
                     <span className="text-emerald-400 font-bold">{verificationSuccess.verified_amount || verificationSuccess.amount_usdt} USDT</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Updated Token Balance:</span>
-                    <span className="text-[#FF5C00] font-black">{user.token_balance + verificationSuccess.tokens_to_credit} Tokens</span>
+                    <span>Updated Barcode Balance:</span>
+                    <span className="text-[#FF5C00] font-black">{user.token_balance + verificationSuccess.tokens_to_credit} Barcodes</span>
                   </div>
                   <div className="pt-2 border-t border-[#1A4B36] flex items-center justify-between">
                     <span>TxID:</span>
@@ -226,7 +226,7 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
                 {/* Package Selection */}
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-2.5">
-                    1. Select Token Package
+                    1. Select Barcode Package
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     {packages.map(pkg => (
@@ -248,7 +248,7 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
                         <div>
                           <div className="text-xs font-bold text-white truncate" title={pkg.label}>{pkg.label}</div>
                           <div className="text-lg font-black text-[#FF5C00] mt-0.5 font-mono">
-                            {pkg.tokens} <span className="text-xs font-normal text-[#D5EFE3]/70">Tokens</span>
+                            {pkg.tokens} <span className="text-xs font-normal text-[#D5EFE3]/70">Barcodes</span>
                           </div>
                         </div>
                         <div className="mt-2 pt-2 border-t border-[#1A4B36]/40 flex items-center justify-between gap-1">
@@ -362,7 +362,7 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
                     ) : (
                       <>
                         <ShieldCheck className="h-4 w-4" />
-                        <span>Verify & Credit {selectedPkg.tokens} Tokens</span>
+                        <span>Verify & Credit {selectedPkg.tokens} Barcodes</span>
                       </>
                     )}
                   </button>

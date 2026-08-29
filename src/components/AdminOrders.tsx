@@ -111,19 +111,19 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
     const updated = PortalStore.updateUserTokens(userId, count, true);
     if (updated) {
       setUsers(PortalStore.getAllUsers());
-      showToast(`Added +${count} tokens to ${updated.email}`);
+      showToast(`Added +${count} barcodes to ${updated.email}`);
     }
   };
 
   const handleSetTokens = (userId: string, current: number) => {
-    const input = prompt('Enter new token balance for user:', current.toString());
+    const input = prompt('Enter new barcode balance for user:', current.toString());
     if (input !== null) {
       const parsed = parseInt(input, 10);
       if (!isNaN(parsed) && parsed >= 0) {
         const updated = PortalStore.updateUserTokens(userId, parsed, false);
         if (updated) {
           setUsers(PortalStore.getAllUsers());
-          showToast(`Set ${updated.email} balance to ${parsed} tokens`);
+          showToast(`Set ${updated.email} balance to ${parsed} barcodes`);
         }
       }
     }
@@ -147,7 +147,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
     setPkgLabel('');
     setPkgUsdt(25);
     setPkgTokens(30);
-    setPkgBonus('+5 Bonus Tokens');
+    setPkgBonus('+5 Bonus Barcodes');
     setPkgPopular(false);
     setPkgDescription('');
     setPkgEnabled(true);
@@ -232,10 +232,20 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
   };
 
   const handleResetPackages = () => {
-    if (confirm('Reset all token packages to official system defaults?')) {
+    if (confirm('Reset all barcode packages to official system defaults?')) {
       const reset = PortalStore.resetDefaultPackages();
       setPackages(reset);
-      showToast('Reset to default token packages.');
+      showToast('Reset to default barcode packages.');
+    }
+  };
+
+  const handleRunRetentionCleanup = () => {
+    const res = PortalStore.cleanupInactiveUsers(30);
+    setUsers(PortalStore.getAllUsers());
+    if (res.deletedCount > 0) {
+      showToast(`30-Day Retention Cleanup: Removed ${res.deletedCount} inactive non-depositing user accounts.`);
+    } else {
+      showToast('All accounts are active or within the 30-day deposit retention window.');
     }
   };
 
@@ -322,7 +332,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
               }`}
             >
               <Users className="h-3.5 w-3.5" />
-              <span>Users & Tokens ({users.length})</span>
+              <span>Users & Barcodes ({users.length})</span>
             </button>
 
             <button
@@ -334,7 +344,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
               }`}
             >
               <PackagePlus className="h-3.5 w-3.5" />
-              <span>Token Packages ({packages.length})</span>
+              <span>Barcode Packages ({packages.length})</span>
             </button>
 
             {/* Cloud Sync Status Indicator & Trigger */}
@@ -449,7 +459,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                     <th className="py-3 px-4">Order ID & Date</th>
                     <th className="py-3 px-4">User</th>
                     <th className="py-3 px-4">USDT Amount</th>
-                    <th className="py-3 px-4">Tokens</th>
+                    <th className="py-3 px-4">Barcodes</th>
                     <th className="py-3 px-4">TxID (Tronscan)</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
@@ -526,7 +536,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                               <button
                                 onClick={() => handleForceApprove(order.id)}
                                 className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-[11px] font-bold font-sans transition cursor-pointer"
-                                title="Force Approve & Credit Tokens"
+                                title="Force Approve & Credit Barcodes"
                               >
                                 Force Approve
                               </button>
@@ -555,10 +565,26 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
         {/* TAB 2: USERS & TOKEN BALANCES */}
         {activeTab === 'users' && (
           <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-bold text-white font-sans">User Management</h3>
-                <p className="text-xs text-[#D5EFE3]/70 font-sans">View client balances and adjust token credits</p>
+                <h3 className="text-sm font-bold text-white font-sans flex items-center gap-2">
+                  <Users className="h-4 w-4 text-[#FF5C00]" />
+                  <span>User & Unique ID Management</span>
+                </h3>
+                <p className="text-xs text-[#D5EFE3]/70 font-sans">
+                  View unique client IDs, barcode credits, and automated 30-day retention policies
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRunRetentionCleanup}
+                  className="px-3 py-1.5 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-xl text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  title="Manually purge accounts older than 30 days without deposits"
+                >
+                  <Clock className="h-3.5 w-3.5 text-[#FF5C00]" />
+                  <span>Run 30-Day Cleanup</span>
+                </button>
               </div>
             </div>
 
@@ -566,79 +592,113 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
               <table className="w-full text-left text-xs font-sans">
                 <thead className="bg-[#041A10] text-[#D5EFE3]/70 font-mono uppercase tracking-wider text-[10px] border-b border-[#1A4B36]">
                   <tr>
-                    <th className="py-3 px-4">User ID & Email</th>
+                    <th className="py-3 px-4">Unique Client ID</th>
                     <th className="py-3 px-4">Role</th>
-                    <th className="py-3 px-4">Token Balance</th>
+                    <th className="py-3 px-4">Barcode Balance</th>
                     <th className="py-3 px-4">Registered Date</th>
-                    <th className="py-3 px-4 text-right">Credit Tokens / Actions</th>
+                    <th className="py-3 px-4">30-Day Retention</th>
+                    <th className="py-3 px-4 text-right">Credit Barcodes / Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1A4B36]/60 bg-[#082216]">
-                  {users.map(u => (
-                    <tr key={u.id} className="hover:bg-[#0C2A1E]/50 transition">
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-white">{u.email}</div>
-                        <div className="text-[10px] text-[#D5EFE3]/50 font-mono">{u.id}</div>
-                      </td>
+                  {users.map(u => {
+                    const isAdm = u.role === 'admin' || u.id === 'user-admin-1';
+                    const userOrders = orders.filter(o => o.user_id === u.id || o.user_email === u.email);
+                    const hasApprovedDeposit = userOrders.some(o => o.status === 'approved');
+                    const hasTokens = (u.token_balance || 0) > 0;
+                    const isProtected = isAdm || hasApprovedDeposit || hasTokens;
 
-                      <td className="py-3 px-4">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-                            u.role === 'admin'
-                              ? 'bg-[#FF5C00]/20 text-[#FF5C00] border border-[#FF5C00]/40'
-                              : 'bg-[#041A10] text-[#D5EFE3] border border-[#1A4B36]'
-                          }`}
-                        >
-                          {u.role}
-                        </span>
-                      </td>
+                    const createdMs = new Date(u.created_at || 0).getTime();
+                    const ageDays = Math.floor((Date.now() - createdMs) / (24 * 60 * 60 * 1000));
+                    const daysRemaining = Math.max(0, 30 - ageDays);
 
-                      <td className="py-3 px-4 font-mono">
-                        <div className="text-base font-black text-[#FF5C00]">
-                          {u.token_balance} <span className="text-xs font-normal text-[#D5EFE3]/70">Tokens</span>
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4 text-[#D5EFE3]/60 font-mono text-[11px]">
-                        {new Date(u.created_at).toLocaleDateString()}
-                      </td>
-
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleAddTokens(u.id, 5)}
-                            className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-white rounded-lg text-[11px] font-mono font-bold transition cursor-pointer"
-                            title="Add +5 tokens"
-                          >
-                            +5
-                          </button>
-                          <button
-                            onClick={() => handleAddTokens(u.id, 25)}
-                            className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-white rounded-lg text-[11px] font-mono font-bold transition cursor-pointer"
-                            title="Add +25 tokens"
-                          >
-                            +25
-                          </button>
-                          <button
-                            onClick={() => handleSetTokens(u.id, u.token_balance)}
-                            className="p-1.5 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#FF5C00] rounded-lg text-[11px] transition cursor-pointer"
-                            title="Set custom token balance"
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                          </button>
-                          {u.id !== currentUser.id && (
-                            <button
-                              onClick={() => handleDeleteUser(u.id, u.email)}
-                              className="p-1.5 bg-red-950/60 hover:bg-red-800 text-red-300 border border-red-500/30 rounded-lg text-[11px] transition cursor-pointer"
-                              title="Delete user"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                    return (
+                      <tr key={u.id} className="hover:bg-[#0C2A1E]/50 transition">
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-white font-mono">{u.id}</div>
+                          {u.email !== u.id && (
+                            <div className="text-[10px] text-[#D5EFE3]/50 font-sans">{u.email}</div>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                              u.role === 'admin'
+                                ? 'bg-[#FF5C00]/20 text-[#FF5C00] border border-[#FF5C00]/40'
+                                : 'bg-[#041A10] text-[#D5EFE3] border border-[#1A4B36]'
+                            }`}
+                          >
+                            {u.role}
+                          </span>
+                        </td>
+
+                        <td className="py-3 px-4 font-mono">
+                          <div className="text-base font-black text-[#FF5C00]">
+                            {u.token_balance} <span className="text-xs font-normal text-[#D5EFE3]/70">Barcodes</span>
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-4 text-[#D5EFE3]/60 font-mono text-[11px]">
+                          {new Date(u.created_at).toLocaleDateString()}
+                        </td>
+
+                        <td className="py-3 px-4 font-mono text-[11px]">
+                          {isAdm ? (
+                            <span className="text-emerald-400 font-bold">Admin (Permanent)</span>
+                          ) : isProtected ? (
+                            <span className="text-emerald-300 flex items-center gap-1 font-bold">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                              Active (Deposited)
+                            </span>
+                          ) : (
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              daysRemaining <= 5 
+                                ? 'bg-red-500/20 text-red-300 border border-red-500/30' 
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            }`}>
+                              {daysRemaining}d grace left
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleAddTokens(u.id, 5)}
+                              className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-white rounded-lg text-[11px] font-mono font-bold transition cursor-pointer"
+                              title="Add +5 barcodes"
+                            >
+                              +5
+                            </button>
+                            <button
+                              onClick={() => handleAddTokens(u.id, 25)}
+                              className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-white rounded-lg text-[11px] font-mono font-bold transition cursor-pointer"
+                              title="Add +25 barcodes"
+                            >
+                              +25
+                            </button>
+                            <button
+                              onClick={() => handleSetTokens(u.id, u.token_balance)}
+                              className="p-1.5 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#FF5C00] rounded-lg text-[11px] transition cursor-pointer"
+                              title="Set custom barcode balance"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                            </button>
+                            {u.id !== currentUser.id && (
+                              <button
+                                onClick={() => handleDeleteUser(u.id, u.email)}
+                                className="p-1.5 bg-red-950/60 hover:bg-red-800 text-red-300 border border-red-500/30 rounded-lg text-[11px] transition cursor-pointer"
+                                title="Delete user"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -654,10 +714,10 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
               <div>
                 <h3 className="text-base font-bold text-white font-sans flex items-center gap-2">
                   <Boxes className="h-5 w-5 text-[#FF5C00]" />
-                  <span>Token Packages & Pricing Gateway</span>
+                  <span>Barcode Packages & Pricing Gateway</span>
                 </h3>
                 <p className="text-xs text-[#D5EFE3]/70 font-sans mt-0.5">
-                  Configure token bundles, USDT rates, bonus tiers, and featured packages available for clients during checkout.
+                  Configure barcode bundles, USDT rates, bonus tiers, and featured packages available for clients during checkout.
                 </p>
               </div>
 
@@ -759,12 +819,12 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                       
                       <div className="mt-2 flex items-baseline gap-1.5 font-mono">
                         <span className="text-3xl font-black text-[#FF5C00]">{pkg.tokens}</span>
-                        <span className="text-xs text-[#D5EFE3]/70 font-sans font-bold">Tokens</span>
+                        <span className="text-xs text-[#D5EFE3]/70 font-sans font-bold">Barcodes</span>
                       </div>
 
                       <div className="mt-2 pt-2 border-t border-[#1A4B36]/60 flex items-center justify-between text-xs font-mono">
                         <span className="text-white font-bold">{pkg.usdt} USDT</span>
-                        <span className="text-[11px] text-emerald-400 font-sans font-bold">{pkg.bonus || `1 USDT = ${ratio} T`}</span>
+                        <span className="text-[11px] text-emerald-400 font-sans font-bold">{pkg.bonus || `1 USDT = ${ratio} Barcodes`}</span>
                       </div>
 
                       {pkg.description && (
@@ -774,7 +834,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                       )}
 
                       <div className="mt-2 text-[10px] font-mono text-[#D5EFE3]/50 bg-[#041A10] p-1.5 rounded border border-[#1A4B36]/40">
-                        Effective: {ratio} tokens per 1 USDT
+                        Effective: {ratio} barcodes per 1 USDT
                       </div>
                     </div>
 
@@ -877,7 +937,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                 />
               </div>
 
-              {/* Pricing & Tokens Row */}
+              {/* Pricing & Barcodes Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
@@ -902,7 +962,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#D5EFE3]/80 font-mono mb-1.5">
-                    Tokens Credited *
+                    Barcodes Credited *
                   </label>
                   <input
                     type="number"
@@ -926,7 +986,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                   type="button"
                   onClick={() => {
                     setPkgTokens(pkgUsdt);
-                    setPkgBonus('1 USDT = 1 Token');
+                    setPkgBonus('1 USDT = 1 Barcode');
                   }}
                   className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
                 >
@@ -937,7 +997,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                   onClick={() => {
                     const t = Math.round(pkgUsdt * 1.2);
                     setPkgTokens(t);
-                    setPkgBonus(`+${t - pkgUsdt} Bonus Tokens`);
+                    setPkgBonus(`+${t - pkgUsdt} Bonus Barcodes`);
                   }}
                   className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
                 >
@@ -948,7 +1008,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                   onClick={() => {
                     const t = Math.round(pkgUsdt * 1.5);
                     setPkgTokens(t);
-                    setPkgBonus(`+${t - pkgUsdt} Bonus Tokens`);
+                    setPkgBonus(`+${t - pkgUsdt} Bonus Barcodes`);
                   }}
                   className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
                 >
@@ -959,11 +1019,11 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                   onClick={() => {
                     const t = pkgUsdt * 2;
                     setPkgTokens(t);
-                    setPkgBonus('2x Token Multiplier');
+                    setPkgBonus('2x Barcode Multiplier');
                   }}
                   className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-lg text-[10px] font-mono transition cursor-pointer"
                 >
-                  2x Tokens
+                  2x Barcodes
                 </button>
               </div>
 
@@ -976,7 +1036,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                   type="text"
                   value={pkgBonus}
                   onChange={e => setPkgBonus(e.target.value)}
-                  placeholder="e.g. +5 Bonus Tokens, Best Value, 20% Off"
+                  placeholder="e.g. +5 Bonus Barcodes, Best Value, 20% Off"
                   className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-4 py-2.5 text-xs font-mono outline-none"
                 />
               </div>

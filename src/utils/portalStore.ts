@@ -16,10 +16,10 @@ export interface PortalSettings {
 }
 
 export const DEFAULT_PACKAGES: TokenPackage[] = [
-  { id: 'pkg-1', usdt: 10, tokens: 10, label: 'Starter Pack', bonus: '1 USDT = 1 Token', enabled: true },
-  { id: 'pkg-2', usdt: 25, tokens: 30, label: 'Pro Pack', popular: true, bonus: '+5 Bonus Tokens', enabled: true },
-  { id: 'pkg-3', usdt: 50, tokens: 70, label: 'Agency Pack', bonus: '+20 Bonus Tokens', enabled: true },
-  { id: 'pkg-4', usdt: 100, tokens: 150, label: 'Enterprise Pack', bonus: '+50 Bonus Tokens', enabled: true }
+  { id: 'pkg-1', usdt: 10, tokens: 10, label: 'Starter Pack', bonus: '10 Barcodes ($1/ea)', enabled: true },
+  { id: 'pkg-2', usdt: 25, tokens: 30, label: 'Pro Pack', popular: true, bonus: '+5 Bonus Barcodes', enabled: true },
+  { id: 'pkg-3', usdt: 50, tokens: 70, label: 'Agency Pack', bonus: '+20 Bonus Barcodes', enabled: true },
+  { id: 'pkg-4', usdt: 100, tokens: 150, label: 'Enterprise Pack', bonus: '+50 Bonus Barcodes', enabled: true }
 ];
 
 const DEFAULT_SETTINGS: PortalSettings = {
@@ -37,13 +37,20 @@ const DEFAULT_USERS: User[] = [
     created_at: '2026-01-01T00:00:00.000Z'
   },
   {
-    id: 'user-client-1',
-    email: 'client@test.com',
+    id: 'BRYT-8829-4102',
+    email: 'BRYT-8829-4102',
     role: 'client',
     token_balance: 0,
-    created_at: '2026-02-15T12:00:00.000Z'
+    created_at: new Date().toISOString()
   }
 ];
+
+export function generateUniqueId(): string {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const part1 = Array.from({ length: 4 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
+  const part2 = Array.from({ length: 4 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
+  return `BRYT-${part1}-${part2}`;
+}
 
 export const PortalStore = {
   getSettings(): PortalSettings {
@@ -68,10 +75,22 @@ export const PortalStore = {
         localStorage.setItem(PACKAGES_KEY, JSON.stringify(DEFAULT_PACKAGES));
         return DEFAULT_PACKAGES;
       }
-      const parsed: TokenPackage[] = JSON.parse(raw);
+      let parsed: TokenPackage[] = JSON.parse(raw);
       if (!Array.isArray(parsed) || parsed.length === 0) {
         localStorage.setItem(PACKAGES_KEY, JSON.stringify(DEFAULT_PACKAGES));
         return DEFAULT_PACKAGES;
+      }
+      // Migrate any legacy 'Token' strings to 'Barcode'
+      let needsSave = false;
+      parsed = parsed.map(p => {
+        if (p.bonus && p.bonus.includes('Token')) {
+          needsSave = true;
+          return { ...p, bonus: p.bonus.replace(/Tokens/g, 'Barcodes').replace(/Token/g, 'Barcode') };
+        }
+        return p;
+      });
+      if (needsSave) {
+        localStorage.setItem(PACKAGES_KEY, JSON.stringify(parsed));
       }
       return parsed;
     } catch {
@@ -134,6 +153,58 @@ export const PortalStore = {
     return DEFAULT_PACKAGES;
   },
 
+  cleanupInactiveUsers(daysThreshold: number = 30): { deletedCount: number; deletedUserIds: string[] } {
+    try {
+      const raw = localStorage.getItem(USERS_KEY);
+      if (!raw) return { deletedCount: 0, deletedUserIds: [] };
+
+      const users: User[] = JSON.parse(raw);
+      const orders: Order[] = this.getAllOrders();
+      const now = Date.now();
+      const thresholdMs = daysThreshold * 24 * 60 * 60 * 1000;
+
+      const remainingUsers: User[] = [];
+      const deletedUserIds: string[] = [];
+
+      for (const user of users) {
+        // Never delete administrator accounts
+        if (user.role === 'admin' || user.id === 'user-admin-1' || user.email === 'smada.io') {
+          remainingUsers.push(user);
+          continue;
+        }
+
+        const createdTime = new Date(user.created_at || 0).getTime();
+        const accountAgeMs = now - createdTime;
+
+        // Check if user has active tokens or verified approved deposits
+        const hasTokenBalance = (user.token_balance || 0) > 0;
+        const userOrders = orders.filter(o => o.user_id === user.id || o.user_email === user.email);
+        const hasApprovedDeposit = userOrders.some(o => o.status === 'approved' && (o.amount_usdt > 0 || (o.verified_amount || 0) > 0));
+        const hasDepositHistory = hasTokenBalance || hasApprovedDeposit;
+
+        // Delete if registered for >= 30 days without any deposit history
+        if (accountAgeMs >= thresholdMs && !hasDepositHistory) {
+          deletedUserIds.push(user.id);
+          this.clearSavedProfiles(user.id);
+          if (isSupabaseConfigured()) {
+            SupabaseService.deleteUser(user.id).catch(console.error);
+          }
+        } else {
+          remainingUsers.push(user);
+        }
+      }
+
+      if (deletedUserIds.length > 0) {
+        this.saveUsers(remainingUsers);
+      }
+
+      return { deletedCount: deletedUserIds.length, deletedUserIds };
+    } catch (err) {
+      console.error('Failed to execute inactive users cleanup:', err);
+      return { deletedCount: 0, deletedUserIds: [] };
+    }
+  },
+
   getAllUsers(): User[] {
     try {
       const raw = localStorage.getItem(USERS_KEY);
@@ -180,78 +251,123 @@ export const PortalStore = {
     }
   },
 
-  login(emailOrUsername: string, password?: string): { success: boolean; user?: User; error?: string } {
-    const clean = emailOrUsername.trim().toLowerCase();
-    const cleanPass = password?.trim() || '';
+  registerNewClient(): { user: User; uniqueId: string } {
+    // Purge any 30-day non-depositing users
+    this.cleanupInactiveUsers(30);
 
-    // Check if user is logging in as admin
-    const isAdminIdentifier = 
-      clean === 'smada.io' ||
-      clean === 'smada' ||
-      clean === 'admin' || 
-      clean === 'ad' || 
-      clean === 'admin@portal.io';
+    const users = this.getAllUsers();
+    let uniqueId = generateUniqueId();
+    // Collision safeguard
+    while (users.some(u => u.id === uniqueId || u.email === uniqueId)) {
+      uniqueId = generateUniqueId();
+    }
+
+    const newUser: User = {
+      id: uniqueId,
+      email: uniqueId,
+      role: 'client',
+      token_balance: 0,
+      created_at: new Date().toISOString()
+    };
+
+    users.push(newUser);
+    this.saveUsers(users);
+
+    if (isSupabaseConfigured()) {
+      SupabaseService.upsertUser(newUser).catch(console.error);
+    }
+
+    this.setCurrentUser(newUser);
+    return { user: newUser, uniqueId };
+  },
+
+  loginWithUniqueId(uniqueId: string): { success: boolean; user?: User; error?: string } {
+    // Execute 30-day retention cleanup
+    this.cleanupInactiveUsers(30);
+
+    const clean = uniqueId.trim();
+    if (!clean) {
+      return { success: false, error: 'Please enter your Unique ID to sign in.' };
+    }
 
     const ADMIN_PASSWORD = 'Mainaadam66@';
+    const cleanLower = clean.toLowerCase();
 
-    if (isAdminIdentifier || cleanPass === ADMIN_PASSWORD) {
-      if (cleanPass !== ADMIN_PASSWORD) {
-        return { success: false, error: 'Invalid administrator password.' };
-      }
+    // If entering the admin password or administrator identifier as Unique ID, log in as admin
+    if (
+      clean === ADMIN_PASSWORD ||
+      cleanLower === ADMIN_PASSWORD.toLowerCase() ||
+      cleanLower === 'smada.io' ||
+      cleanLower === 'smada' ||
+      cleanLower === 'admin' ||
+      cleanLower === 'user-admin-1'
+    ) {
+      return this.loginAdmin(ADMIN_PASSWORD);
+    }
 
-      const users = this.getAllUsers();
-      let adminUser = users.find(u => u.role === 'admin' || u.email === 'smada.io');
-      if (!adminUser) {
-        adminUser = {
-          id: 'user-admin-1',
-          email: 'smada.io',
-          role: 'admin',
-          token_balance: 9999,
-          created_at: new Date().toISOString()
-        };
-        users.unshift(adminUser);
-      } else {
-        adminUser.email = 'smada.io';
-        adminUser.role = 'admin';
-      }
-      this.saveUsers(users);
+    const cleanUpper = clean.toUpperCase();
+    const users = this.getAllUsers();
+    const matchedUser = users.find(u => 
+      u.id.toUpperCase() === cleanUpper || 
+      u.email.toUpperCase() === cleanUpper ||
+      u.id.toLowerCase() === cleanLower ||
+      u.email.toLowerCase() === cleanLower
+    );
 
-      if (isSupabaseConfigured()) {
-        SupabaseService.upsertUser(adminUser).catch(console.error);
-      }
+    if (!matchedUser) {
+      return { 
+        success: false, 
+        error: 'Unique ID not found. If you are a new member, please click "Sign Up" to generate your ID.' 
+      };
+    }
 
-      this.setCurrentUser(adminUser);
-      return { success: true, user: adminUser };
+    this.setCurrentUser(matchedUser);
+    return { success: true, user: matchedUser };
+  },
+
+  loginAdmin(password: string): { success: boolean; user?: User; error?: string } {
+    const ADMIN_PASSWORD = 'Mainaadam66@';
+    if (password !== ADMIN_PASSWORD) {
+      return { success: false, error: 'Invalid administrator password.' };
     }
 
     const users = this.getAllUsers();
-    let user = users.find(u => 
-      u.role === 'client' && (
-        u.email.toLowerCase() === clean || 
-        u.email.split('@')[0].toLowerCase() === clean
-      )
-    );
-
-    if (!user) {
-      // Auto-register new client if non-existent
-      user = {
-        id: `user-${Date.now()}`,
-        email: clean.includes('@') ? clean : `${clean}@client.portal`,
-        role: 'client',
-        token_balance: 0,
+    let adminUser = users.find(u => u.role === 'admin' || u.email === 'smada.io' || u.id === 'user-admin-1');
+    if (!adminUser) {
+      adminUser = {
+        id: 'user-admin-1',
+        email: 'smada.io',
+        role: 'admin',
+        token_balance: 9999,
         created_at: new Date().toISOString()
       };
-      users.push(user);
-      this.saveUsers(users);
+      users.unshift(adminUser);
+    } else {
+      adminUser.email = 'smada.io';
+      adminUser.role = 'admin';
     }
+    this.saveUsers(users);
 
-    // Sync with Supabase asynchronously if configured
     if (isSupabaseConfigured()) {
-      SupabaseService.upsertUser(user).catch(console.error);
+      SupabaseService.upsertUser(adminUser).catch(console.error);
     }
 
-    this.setCurrentUser(user);
-    return { success: true, user };
+    this.setCurrentUser(adminUser);
+    return { success: true, user: adminUser };
+  },
+
+  login(emailOrUsername: string, password?: string): { success: boolean; user?: User; error?: string } {
+    const clean = emailOrUsername.trim();
+    const cleanLower = clean.toLowerCase();
+    const cleanPass = password?.trim() || '';
+
+    // If admin password is supplied or admin identifier used
+    if (cleanLower === 'smada.io' || cleanLower === 'smada' || cleanLower === 'admin' || cleanPass === 'Mainaadam66@') {
+      return this.loginAdmin(cleanPass);
+    }
+
+    // Otherwise treat as Unique ID
+    return this.loginWithUniqueId(clean);
   },
 
   logout(): void {

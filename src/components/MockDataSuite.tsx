@@ -484,7 +484,7 @@ from typing import Any, Dict, List, Optional, Tuple
                     <span>Standalone Python Mock Data Specialist Engine</span>
                   </h3>
                   <p className="text-xs text-[#0B2519]/60 font-sans mt-0.5">
-                    Execute the CLI script directly on terminal environments for mock testing, regex validation, or batch PDF417 benchmarks.
+                    Execute the CLI script directly on terminal environments for mock testing, regex validation, or batch barcode benchmarks.
                   </p>
                 </div>
 

@@ -1,6 +1,6 @@
 {
   "name": "Bryt Barcode Tec",
-  "description": "A mobile-first AAMVA-compliant PDF417 barcode generator and 50-state synthetic driver's license mock data suite for testing and benchmarking.",
+  "description": "A mobile-first AAMVA-compliant barcode generator and 50-state synthetic driver's license mock data suite for testing and benchmarking.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
