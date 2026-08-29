@@ -156,6 +156,15 @@ export const PortalStore = {
     return DEFAULT_PACKAGES;
   },
 
+  async syncPackagesToSupabase(): Promise<boolean> {
+    const pkgs = this.getPackages();
+    this.savePackages(pkgs);
+    if (isSupabaseConfigured()) {
+      return await SupabaseService.upsertPackages(pkgs);
+    }
+    return true;
+  },
+
   cleanupInactiveUsers(daysThreshold: number = 30): { deletedCount: number; deletedUserIds: string[] } {
     try {
       const raw = localStorage.getItem(USERS_KEY);

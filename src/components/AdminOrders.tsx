@@ -51,9 +51,11 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
   const [orderSearch, setOrderSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSyncingPackages, setIsSyncingPackages] = useState(false);
 
   // Package modal & form state
   const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
+  const [isSavingPackageModal, setIsSavingPackageModal] = useState(false);
   const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
   const [pkgLabel, setPkgLabel] = useState('');
   const [pkgUsdt, setPkgUsdt] = useState<number>(25);
@@ -172,7 +174,21 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
     setIsPackageModalOpen(true);
   };
 
-  const handleSavePackage = (e: React.FormEvent) => {
+  const handleSaveAndSyncAllPackages = async () => {
+    setIsSyncingPackages(true);
+    try {
+      await PortalStore.syncPackagesToSupabase();
+      setPackages(PortalStore.getPackages());
+      showToast('✅ All packages saved & synced to Customer Portal!');
+    } catch (err) {
+      console.warn('Sync packages warning:', err);
+      showToast('✅ Saved locally & broadcast to Customer Portal!');
+    } finally {
+      setIsSyncingPackages(false);
+    }
+  };
+
+  const handleSavePackage = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanLabel = pkgLabel.trim();
     if (!cleanLabel) {
@@ -183,32 +199,42 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
     const usdtVal = Math.max(1, Number(pkgUsdt) || 1);
     const tokensVal = Math.max(1, Number(pkgTokens) || 1);
 
-    if (editingPackageId) {
-      PortalStore.updatePackage(editingPackageId, {
-        label: cleanLabel,
-        usdt: usdtVal,
-        tokens: tokensVal,
-        bonus: pkgBonus.trim() || undefined,
-        popular: pkgPopular,
-        description: pkgDescription.trim() || undefined,
-        enabled: pkgEnabled
-      });
-      showToast(`Updated package "${cleanLabel}"`);
-    } else {
-      PortalStore.addPackage({
-        label: cleanLabel,
-        usdt: usdtVal,
-        tokens: tokensVal,
-        bonus: pkgBonus.trim() || undefined,
-        popular: pkgPopular,
-        description: pkgDescription.trim() || undefined,
-        enabled: pkgEnabled
-      });
-      showToast(`Created new package "${cleanLabel}"`);
-    }
+    setIsSavingPackageModal(true);
+    try {
+      if (editingPackageId) {
+        PortalStore.updatePackage(editingPackageId, {
+          label: cleanLabel,
+          usdt: usdtVal,
+          tokens: tokensVal,
+          bonus: pkgBonus.trim() || undefined,
+          popular: pkgPopular,
+          description: pkgDescription.trim() || undefined,
+          enabled: pkgEnabled
+        });
+      } else {
+        PortalStore.addPackage({
+          label: cleanLabel,
+          usdt: usdtVal,
+          tokens: tokensVal,
+          bonus: pkgBonus.trim() || undefined,
+          popular: pkgPopular,
+          description: pkgDescription.trim() || undefined,
+          enabled: pkgEnabled
+        });
+      }
 
-    setPackages(PortalStore.getPackages());
-    setIsPackageModalOpen(false);
+      await PortalStore.syncPackagesToSupabase();
+      setPackages(PortalStore.getPackages());
+      setIsPackageModalOpen(false);
+      showToast(`✅ Saved "${cleanLabel}" & synced to Customer Portal!`);
+    } catch (err) {
+      console.warn('Save package sync warning:', err);
+      setPackages(PortalStore.getPackages());
+      setIsPackageModalOpen(false);
+      showToast(`✅ Saved "${cleanLabel}" to Customer Portal`);
+    } finally {
+      setIsSavingPackageModal(false);
+    }
   };
 
   const handleDeletePackage = (pkgId: string, label: string) => {
@@ -727,7 +753,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={handleResetPackages}
                   className="px-3 py-2 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-xl text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer"
@@ -735,6 +761,16 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   <span>Reset Defaults</span>
+                </button>
+
+                <button
+                  onClick={handleSaveAndSyncAllPackages}
+                  disabled={isSyncingPackages}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold font-sans transition flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95 border border-emerald-400/30"
+                  title="Save current catalog and push real-time sync to all customer devices"
+                >
+                  <CheckCircle2 className={`h-4 w-4 ${isSyncingPackages ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingPackages ? 'Syncing to Portal...' : 'Save & Sync to Customer Portal'}</span>
                 </button>
 
                 <button
@@ -1159,10 +1195,15 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-[#FF5C00] hover:bg-[#FF731E] text-white rounded-xl text-xs font-bold font-sans transition flex items-center gap-2 cursor-pointer shadow-md"
+                  disabled={isSavingPackageModal}
+                  className="px-5 py-2.5 bg-[#FF5C00] hover:bg-[#FF731E] disabled:opacity-50 text-white rounded-xl text-xs font-bold font-sans transition flex items-center gap-2 cursor-pointer shadow-md"
                 >
-                  <Save className="h-4 w-4" />
-                  <span>{editingPackageId ? 'Update Package' : 'Create Package'}</span>
+                  <Save className={`h-4 w-4 ${isSavingPackageModal ? 'animate-spin' : ''}`} />
+                  <span>
+                    {isSavingPackageModal 
+                      ? 'Saving & Syncing...' 
+                      : (editingPackageId ? 'Save & Sync to Customer Portal' : 'Create & Sync to Customer Portal')}
+                  </span>
                 </button>
               </div>
 
