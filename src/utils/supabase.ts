@@ -96,6 +96,15 @@ CREATE TABLE IF NOT EXISTS public.portal_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Ensure columns exist if tables were created in a previous version
+ALTER TABLE IF EXISTS public.portal_settings 
+  ADD COLUMN IF NOT EXISTS btc_deposit_address TEXT,
+  ADD COLUMN IF NOT EXISTS ltc_deposit_address TEXT;
+
+ALTER TABLE IF EXISTS public.trc20_orders 
+  ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'usdt',
+  ADD COLUMN IF NOT EXISTS deposit_address TEXT;
+
 -- 4. Barcode Packages Catalog Table
 CREATE TABLE IF NOT EXISTS public.portal_packages (
   id TEXT PRIMARY KEY,

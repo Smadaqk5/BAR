@@ -563,17 +563,29 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
                   </div>
 
                   {/* Network Warning Banner */}
-                  <div className="bg-[#FF5C00]/10 border border-[#FF5C00]/40 rounded-xl p-3 flex items-start gap-2.5">
-                    <AlertTriangle className="h-4 w-4 text-[#FF5C00] shrink-0 mt-0.5" />
-                    <p className="text-xs text-[#FF9E66] font-medium leading-relaxed">
-                      {paymentMethod === 'btc' ? (
-                        <>Send exact <strong>{cryptoAmount} BTC</strong> via native Bitcoin network. Barcodes are credited automatically upon on-chain detection.</>
-                      ) : paymentMethod === 'ltc' ? (
-                        <>Send exact <strong>{cryptoAmount} LTC</strong> via Litecoin network. Automatic approval & instant crediting with near-zero network fees.</>
-                      ) : (
-                        <>Send only <strong>USDT via the TRON (TRC-20)</strong> network. Double-check network fees to ensure the exact amount is received.</>
-                      )}
-                    </p>
+                  <div className="flex flex-col gap-2.5">
+                    <div className="bg-[#FF5C00]/10 border border-[#FF5C00]/40 rounded-xl p-3 flex items-start gap-2.5">
+                      <AlertTriangle className="h-4 w-4 text-[#FF5C00] shrink-0 mt-0.5" />
+                      <p className="text-xs text-[#FF9E66] font-medium leading-relaxed">
+                        {paymentMethod === 'btc' ? (
+                          <>Send exact <strong>{cryptoAmount} BTC</strong> via native Bitcoin network. Barcodes are credited automatically upon on-chain detection.</>
+                        ) : paymentMethod === 'ltc' ? (
+                          <>Send exact <strong>{cryptoAmount} LTC</strong> via Litecoin network. Automatic approval & instant crediting with near-zero network fees.</>
+                        ) : (
+                          <>Send only <strong>USDT via the TRON (TRC-20)</strong> network. Double-check network fees to ensure the exact amount is received.</>
+                        )}
+                      </p>
+                    </div>
+
+                    {paymentMethod === 'btc' && (
+                      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex items-start gap-2.5 text-xs text-amber-200">
+                        <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-bold text-amber-300 block mb-0.5">Binance Deposit Notice:</span>
+                          Binance supports deposits from all BTC addresses (starting with "1", "3", "bc1p" and "bc1q").
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

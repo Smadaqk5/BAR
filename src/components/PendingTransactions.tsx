@@ -6,6 +6,7 @@ import {
   CheckCircle2, 
   XCircle, 
   AlertCircle, 
+  AlertTriangle,
   ExternalLink, 
   Copy, 
   Check, 
@@ -594,6 +595,15 @@ export const PendingTransactions: React.FC<PendingTransactionsProps> = ({
                                   </button>
                                 </div>
                               </div>
+                              {method === 'btc' && (
+                                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 flex items-start gap-2 text-[11px] text-amber-200">
+                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                  <div>
+                                    <span className="font-bold text-amber-300 block">Binance Deposit Notice:</span>
+                                    Binance supports deposits from all BTC addresses (starting with "1", "3", "bc1p" and "bc1q").
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -817,6 +827,16 @@ export const PendingTransactions: React.FC<PendingTransactionsProps> = ({
             <span className="text-xs font-mono text-center text-white break-all select-all bg-[#041A10] p-2.5 rounded-xl border border-[#1A4B36] w-full">
               {qrModalOrder.deposit_address}
             </span>
+
+            {qrModalOrder.payment_method === 'btc' && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 text-[11px] text-amber-200 flex items-start gap-2 text-left w-full">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-amber-300 block">Binance Deposit Notice:</span>
+                  Binance supports deposits from all BTC addresses (starting with "1", "3", "bc1p" and "bc1q").
+                </div>
+              </div>
+            )}
 
             <button
               type="button"
