@@ -55,8 +55,10 @@ import { MockDataSuite } from './components/MockDataSuite';
 import { AuthScreen } from './components/AuthScreen';
 import { Trc20Checkout } from './components/Trc20Checkout';
 import { AdminOrders } from './components/AdminOrders';
+import { PendingTransactions } from './components/PendingTransactions';
+import { SupportModal } from './components/SupportModal';
 import { PortalStore } from './utils/portalStore';
-import { Coins, LogOut, ShieldAlert, PlusCircle } from 'lucide-react';
+import { Coins, LogOut, ShieldAlert, PlusCircle, Clock, Radio, Headphones } from 'lucide-react';
 import { 
   generateSyntheticRecord, 
   generateSingleDLN,
@@ -77,6 +79,8 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserType | null>(() => PortalStore.getCurrentUser());
   const [viewMode, setViewMode] = useState<'client' | 'admin'>('client');
   const [showCheckoutModal, setShowCheckoutModal] = useState<boolean>(false);
+  const [showIncomingDepositsModal, setShowIncomingDepositsModal] = useState<boolean>(false);
+  const [showSupportModal, setShowSupportModal] = useState<boolean>(false);
 
   // Form State
   const [formData, setFormData] = useState<AAMVAData>(DEFAULT_ALASKA_DEMO);
@@ -130,6 +134,33 @@ export default function App() {
       }
     });
   }, []);
+
+  // Track active pending deposits for current user
+  const [userPendingCount, setUserPendingCount] = useState<number>(() => {
+    if (!currentUser?.id) return 0;
+    const userOrders = PortalStore.getUserOrders(currentUser.id);
+    return userOrders.filter(o => o.status === 'verifying' || o.status === 'pending_payment').length;
+  });
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const updatePending = () => {
+      const userOrders = PortalStore.getUserOrders(currentUser.id);
+      const count = userOrders.filter(o => o.status === 'verifying' || o.status === 'pending_payment').length;
+      setUserPendingCount(count);
+    };
+
+    updatePending();
+    window.addEventListener('bryt_portal_orders_changed', updatePending);
+    window.addEventListener('bryt_portal_balance_updated', updatePending);
+    window.addEventListener('storage', updatePending);
+
+    return () => {
+      window.removeEventListener('bryt_portal_orders_changed', updatePending);
+      window.removeEventListener('bryt_portal_balance_updated', updatePending);
+      window.removeEventListener('storage', updatePending);
+    };
+  }, [currentUser?.id]);
 
   // Refs
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -721,20 +752,50 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
-            {/* Barcode Balance Indicator */}
+            {/* Deposits Header Button */}
+            <button
+              id="btn-deposits"
+              type="button"
+              onClick={() => setShowIncomingDepositsModal(true)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold font-sans transition cursor-pointer shadow-xs active:scale-95 border ${
+                userPendingCount > 0
+                  ? 'bg-[#FF5C00]/20 hover:bg-[#FF5C00]/30 border-[#FF5C00] text-[#FF5C00] shadow-[0_0_12px_rgba(255,92,0,0.3)] animate-pulse'
+                  : 'bg-[#08281B] hover:bg-[#0E3827] border-[#1A4B36] text-[#D5EFE3] hover:text-white'
+              }`}
+              title="View deposits and real-time verification tracker"
+            >
+              <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
+                userPendingCount > 0 ? 'text-[#FF5C00]' : 'text-emerald-400'
+              }`}>
+                {userPendingCount > 0 ? (
+                  <Radio className="h-3.5 w-3.5 animate-pulse text-[#FF5C00]" />
+                ) : (
+                  <Clock className="h-3.5 w-3.5" />
+                )}
+              </div>
+              <span className="font-sans whitespace-nowrap">Deposits</span>
+              {userPendingCount > 0 ? (
+                <span className="px-1.5 py-0.2 rounded-full bg-[#FF5C00] text-white font-mono text-[10px] font-black">
+                  {userPendingCount} Active
+                </span>
+              ) : (
+                <span className="px-1.5 py-0.2 rounded bg-[#041A10] border border-[#1A4B36] text-[#D5EFE3]/70 font-mono text-[10px]">
+                  Live
+                </span>
+              )}
+            </button>
+
+            {/* Buy Barcodes Button */}
             <button
               onClick={() => setShowCheckoutModal(true)}
-              className="flex items-center gap-2 px-3.5 py-1.5 bg-[#08281B] hover:bg-[#0E3827] border border-[#1A4B36] rounded-xl text-white transition cursor-pointer shadow-xs group"
-              title="Click to buy barcodes with USDT"
+              id="btn-buy-barcodes"
+              className="flex items-center gap-2 px-3.5 py-1.5 bg-[#FF5C00] hover:bg-[#FF731E] text-white rounded-xl text-xs font-bold font-sans transition cursor-pointer shadow-[0_2px_12px_rgba(255,92,0,0.35)] group active:scale-95"
+              title="Buy Barcodes with USDT, BTC, or LTC"
             >
-              <div className="w-5 h-5 rounded-full bg-[#FF5C00]/20 flex items-center justify-center text-[#FF5C00] group-hover:scale-110 transition">
-                <Coins className="h-3.5 w-3.5" />
-              </div>
-              <span className="text-xs font-mono font-black text-[#FF5C00]">
-                {currentUser.token_balance} <span className="text-[10px] font-sans font-medium text-[#D5EFE3]/80">Barcodes</span>
-              </span>
-              <span className="text-[10px] bg-[#FF5C00] text-white px-1.5 py-0.5 rounded font-bold uppercase">
-                + Deposit
+              <Coins className="h-3.5 w-3.5" />
+              <span>Buy Barcodes</span>
+              <span className="text-[10px] bg-black/30 px-1.5 py-0.5 rounded font-mono font-bold text-white">
+                {currentUser.token_balance} Codes
               </span>
             </button>
 
@@ -749,6 +810,17 @@ export default function App() {
                 <span>Admin Panel</span>
               </button>
             )}
+
+            {/* Support Desk Trigger */}
+            <button
+              onClick={() => setShowSupportModal(true)}
+              id="btn-official-support"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#08281B] hover:bg-[#0E3827] border border-[#1A4B36] hover:border-emerald-500/50 text-[#D5EFE3] hover:text-white text-xs font-bold font-sans rounded-xl transition cursor-pointer shadow-xs active:scale-95"
+              title="Official Customer Support (Telegram & WhatsApp)"
+            >
+              <Headphones className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Support</span>
+            </button>
 
             {/* Profiles Drawer Trigger */}
             <button
@@ -1726,12 +1798,79 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* INCOMING CRYPTO DEPOSITS MODAL */}
+      <AnimatePresence>
+        {showIncomingDepositsModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              className="w-full max-w-5xl my-auto bg-[#041A10] border border-[#1A4B36] rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]"
+            >
+              {/* Modal Header */}
+              <div className="px-5 py-4 bg-[#03130C] border-b border-[#1A4B36] flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#FF5C00]/20 text-[#FF5C00] flex items-center justify-center border border-[#FF5C00]/30">
+                    <Radio className="h-4.5 w-4.5 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-white font-sans">
+                        Deposits
+                      </h3>
+                      {userPendingCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#FF5C00] text-white animate-pulse">
+                          {userPendingCount} In Progress
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-[#D5EFE3]/70 font-sans mt-0.5">
+                      Live on-chain verification engine across TRC-20 USDT, Bitcoin, and Litecoin
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowIncomingDepositsModal(false)}
+                  className="p-2 bg-[#082216] hover:bg-[#103825] text-[#D5EFE3]/70 hover:text-white rounded-xl border border-[#1A4B36] transition cursor-pointer"
+                  title="Close Deposits modal"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="overflow-y-auto flex-1 p-2 sm:p-4">
+                <PendingTransactions
+                  user={currentUser}
+                  isModal={true}
+                  onClose={() => setShowIncomingDepositsModal(false)}
+                  onOpenDepositModal={() => {
+                    setShowIncomingDepositsModal(false);
+                    setShowCheckoutModal(true);
+                  }}
+                  onBalanceUpdated={updated => setCurrentUser(updated)}
+                />
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* TRC-20 USDT CHECKOUT & TOKEN DEPOSIT MODAL */}
       <Trc20Checkout
         isOpen={showCheckoutModal}
         onClose={() => setShowCheckoutModal(false)}
         user={currentUser}
         onBalanceUpdated={updated => setCurrentUser(updated)}
+      />
+
+      {/* OFFICIAL CUSTOMER SUPPORT MODAL */}
+      <SupportModal
+        isOpen={showSupportModal}
+        onClose={() => setShowSupportModal(false)}
       />
 
     </div>

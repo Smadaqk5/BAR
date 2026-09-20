@@ -436,3 +436,18 @@ export const HELP_HINTS: Record<string, FieldHelp> = {
     hint: 'Indicates if middle name was cut off during layout. N = Not Truncated, T = Truncated.'
   }
 };
+
+export const SUPPORT_CONFIG = {
+  telegram: {
+    handle: '@kingof_kyc',
+    url: 'https://t.me/kingof_kyc',
+    display: 't.me/kingof_kyc'
+  },
+  whatsapp: {
+    number: '+1 (414) 401-5805',
+    cleanNumber: '14144015805',
+    url: 'https://wa.me/14144015805',
+    display: '+1 (414) 401-5805'
+  }
+};
+

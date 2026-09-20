@@ -51,12 +51,18 @@ export interface User {
 
 export type OrderStatus = 'pending_payment' | 'verifying' | 'approved' | 'rejected';
 
+export type PaymentMethod = 'usdt_trc20' | 'btc' | 'ltc';
+
 export interface Order {
   id: string;
   user_id: string;
   user_email: string;
   amount_usdt: number;
   tokens_to_credit: number;
+  payment_method?: PaymentMethod;
+  crypto_amount?: number;
+  crypto_currency?: 'USDT' | 'BTC' | 'LTC';
+  deposit_address?: string;
   tx_hash?: string;
   status: OrderStatus;
   created_at: string;
@@ -91,6 +97,17 @@ export interface TokenPackage {
 export interface TronVerifyResult {
   valid: boolean;
   amountReceived: number;
+  error?: string;
+  confirmed?: boolean;
+  contractRet?: string;
+  recipient?: string;
+  txDetails?: any;
+}
+
+export interface CryptoVerifyResult {
+  valid: boolean;
+  amountReceived: number;
+  currency: 'USDT' | 'BTC' | 'LTC';
   error?: string;
   confirmed?: boolean;
   contractRet?: string;

@@ -29,11 +29,21 @@ import {
   ToggleLeft,
   ToggleRight,
   RotateCcw,
-  AlertCircle
+  AlertCircle,
+  Wallet,
+  Zap,
+  QrCode,
+  Sliders,
+  Globe,
+  CreditCard,
+  History,
+  ArrowUpRight,
+  SlidersHorizontal
 } from 'lucide-react';
-import { PortalStore } from '../utils/portalStore';
+import { PortalStore, PortalSettings } from '../utils/portalStore';
 import { isSupabaseConfigured } from '../utils/supabase';
-import { User, Order, OrderStatus, TokenPackage } from '../types';
+import { User, Order, OrderStatus, TokenPackage, PaymentMethod } from '../types';
+import { AdminPackagePricingManager } from './AdminPackagePricingManager';
 
 interface AdminOrdersProps {
   onBackToPortal: () => void;
@@ -44,12 +54,35 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
   const [orders, setOrders] = useState<Order[]>(PortalStore.getAllOrders());
   const [users, setUsers] = useState<User[]>(PortalStore.getAllUsers());
   const [packages, setPackages] = useState<TokenPackage[]>(PortalStore.getPackages());
-  const [activeTab, setActiveTab] = useState<'orders' | 'users' | 'packages'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'users' | 'packages' | 'gateway' | 'billing'>('orders');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Account & Billing Management State
+  const [billingSection, setBillingSection] = useState<'all' | 'override' | 'history' | 'packages'>('all');
+  const [overrideUserId, setOverrideUserId] = useState<string>('');
+  const [overrideMode, setOverrideMode] = useState<'set' | 'add' | 'subtract'>('set');
+  const [overrideAmount, setOverrideAmount] = useState<number>(50);
+  const [overrideReason, setOverrideReason] = useState<string>('Account Adjustment / Balance Override');
+  const [isApplyingOverride, setIsApplyingOverride] = useState<boolean>(false);
+  const [billingUserSearch, setBillingUserSearch] = useState<string>('');
+
+  // Deposit History Filters in Billing Tab
+  const [billingDepositSearch, setBillingDepositSearch] = useState<string>('');
+  const [billingDepositMethod, setBillingDepositMethod] = useState<string>('all');
+  const [billingDepositStatus, setBillingDepositStatus] = useState<string>('all');
+
+  // Gateway Settings State
+  const initialSettings = PortalStore.getSettings();
+  const [gatewayTronAddress, setGatewayTronAddress] = useState(initialSettings.depositAddress);
+  const [gatewayBtcAddress, setGatewayBtcAddress] = useState(initialSettings.btcDepositAddress);
+  const [gatewayLtcAddress, setGatewayLtcAddress] = useState(initialSettings.ltcDepositAddress);
+  const [gatewayAutoApproval, setGatewayAutoApproval] = useState(initialSettings.autoApproval !== false);
+  const [isSavingGateway, setIsSavingGateway] = useState(false);
 
   // Filter state
   const [orderSearch, setOrderSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [methodFilter, setMethodFilter] = useState<string>('all');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSyncingPackages, setIsSyncingPackages] = useState(false);
 
@@ -288,14 +321,109 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
   const totalApprovedOrders = orders.filter(o => o.status === 'approved').length;
   const pendingOrdersCount = orders.filter(o => o.status === 'pending_payment' || o.status === 'verifying').length;
 
+  const handleSaveGatewaySettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingGateway(true);
+    try {
+      const updated = PortalStore.saveSettings({
+        depositAddress: gatewayTronAddress.trim(),
+        btcDepositAddress: gatewayBtcAddress.trim(),
+        ltcDepositAddress: gatewayLtcAddress.trim(),
+        autoApproval: gatewayAutoApproval
+      });
+      showToast('✅ Crypto Gateway Wallets & Auto-Approval Settings Saved!');
+    } catch (err: any) {
+      showToast('Failed to save gateway settings: ' + (err?.message || 'Error'));
+    } finally {
+      setIsSavingGateway(false);
+    }
+  };
+
   const filteredOrders = orders.filter(o => {
     const matchesSearch = 
       o.id.toLowerCase().includes(orderSearch.toLowerCase()) ||
       o.user_email.toLowerCase().includes(orderSearch.toLowerCase()) ||
       (o.tx_hash && o.tx_hash.toLowerCase().includes(orderSearch.toLowerCase()));
     const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesMethod = methodFilter === 'all' || (o.payment_method || 'usdt_trc20') === methodFilter;
+    return matchesSearch && matchesStatus && matchesMethod;
   });
+
+  const getAdminExplorerUrl = (hash: string, method?: PaymentMethod) => {
+    if (method === 'btc') return `https://mempool.space/tx/${hash}`;
+    if (method === 'ltc') return `https://litecoinspace.org/tx/${hash}`;
+    return `https://tronscan.org/#/transaction/${hash}`;
+  };
+
+  const getAdminExplorerName = (method?: PaymentMethod) => {
+    if (method === 'btc') return 'Mempool';
+    if (method === 'ltc') return 'Litecoinspace';
+    return 'Tronscan';
+  };
+
+  // Account & Billing Helpers
+  const totalCirculatingBarcodes = users.reduce((sum, u) => sum + (u.token_balance || 0), 0);
+  const activePackagesCount = packages.filter(p => p.enabled !== false).length;
+
+  const filteredBillingOrders = orders.filter(order => {
+    const method = order.payment_method || 'usdt_trc20';
+    const matchesMethod = billingDepositMethod === 'all' || method === billingDepositMethod;
+    const matchesStatus = billingDepositStatus === 'all' || order.status === billingDepositStatus;
+    const q = billingDepositSearch.toLowerCase().trim();
+    const matchesSearch = !q || 
+      order.id.toLowerCase().includes(q) ||
+      order.user_email.toLowerCase().includes(q) ||
+      (order.tx_hash && order.tx_hash.toLowerCase().includes(q)) ||
+      (order.to_address && order.to_address.toLowerCase().includes(q));
+    return matchesMethod && matchesStatus && matchesSearch;
+  });
+
+  const filteredBillingUsers = users.filter(u => {
+    const q = billingUserSearch.toLowerCase().trim();
+    return !q || 
+      u.id.toLowerCase().includes(q) ||
+      u.email.toLowerCase().includes(q) ||
+      u.role.toLowerCase().includes(q);
+  });
+
+  const handleApplyManualOverride = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!overrideUserId) {
+      showToast('⚠️ Please select a user account to override.');
+      return;
+    }
+
+    const targetUser = users.find(u => u.id === overrideUserId);
+    if (!targetUser) {
+      showToast('⚠️ Target user account not found.');
+      return;
+    }
+
+    const inputVal = Math.max(0, Number(overrideAmount) || 0);
+    let finalBalance = targetUser.token_balance;
+
+    if (overrideMode === 'set') {
+      finalBalance = inputVal;
+    } else if (overrideMode === 'add') {
+      finalBalance = targetUser.token_balance + inputVal;
+    } else if (overrideMode === 'subtract') {
+      finalBalance = Math.max(0, targetUser.token_balance - inputVal);
+    }
+
+    setIsApplyingOverride(true);
+    try {
+      const updated = PortalStore.updateUserTokens(targetUser.id, finalBalance, false);
+      if (updated) {
+        setUsers(PortalStore.getAllUsers());
+        showToast(`✅ Overrode ${targetUser.email || targetUser.id} balance to ${finalBalance} barcodes (${overrideReason.trim() || 'Manual Override'})`);
+      }
+    } catch (err) {
+      console.error('Manual override failed:', err);
+      showToast('❌ Failed to update user balance.');
+    } finally {
+      setIsApplyingOverride(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#04140D] text-[#D5EFE3] flex flex-col font-sans">
@@ -349,7 +477,7 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
               }`}
             >
               <Receipt className="h-3.5 w-3.5" />
-              <span>TRC-20 Orders ({orders.length})</span>
+              <span>Crypto Orders ({orders.length})</span>
               {pendingOrdersCount > 0 && (
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
               )}
@@ -377,6 +505,30 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
             >
               <PackagePlus className="h-3.5 w-3.5" />
               <span>Barcode Packages ({packages.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('gateway')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'gateway'
+                  ? 'bg-[#FF5C00] text-white shadow-md'
+                  : 'bg-[#041A10] text-[#D5EFE3] hover:bg-[#103825] border border-[#1A4B36]'
+              }`}
+            >
+              <Wallet className="h-3.5 w-3.5" />
+              <span>Gateways (BTC/LTC/TRC20)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('billing')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'billing'
+                  ? 'bg-[#FF5C00] text-white shadow-md'
+                  : 'bg-[#041A10] text-[#D5EFE3] hover:bg-[#103825] border border-[#1A4B36]'
+              }`}
+            >
+              <CreditCard className="h-3.5 w-3.5" />
+              <span>Account & Billing</span>
             </button>
 
             {/* Cloud Sync Status Indicator & Trigger */}
@@ -468,7 +620,18 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                 <Search className="h-4 w-4 text-[#D5EFE3]/40 absolute left-3 top-2.5" />
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                <select
+                  value={methodFilter}
+                  onChange={e => setMethodFilter(e.target.value)}
+                  className="bg-[#041A10] border border-[#1A4B36] text-[#D5EFE3] text-xs font-bold font-mono rounded-xl px-3 py-2 outline-none cursor-pointer"
+                >
+                  <option value="all">All Methods</option>
+                  <option value="usdt_trc20">USDT (TRC-20)</option>
+                  <option value="btc">Bitcoin (BTC)</option>
+                  <option value="ltc">Litecoin (LTC)</option>
+                </select>
+
                 <select
                   value={statusFilter}
                   onChange={e => setStatusFilter(e.target.value)}
@@ -490,9 +653,10 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                   <tr>
                     <th className="py-3 px-4">Order ID & Date</th>
                     <th className="py-3 px-4">User</th>
-                    <th className="py-3 px-4">USDT Amount</th>
+                    <th className="py-3 px-4">Method</th>
+                    <th className="py-3 px-4">Crypto Amount</th>
                     <th className="py-3 px-4">Barcodes</th>
-                    <th className="py-3 px-4">TxID (Tronscan)</th>
+                    <th className="py-3 px-4">TxID (Explorer)</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
@@ -500,67 +664,104 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                 <tbody className="divide-y divide-[#1A4B36]/60 bg-[#082216]">
                   {filteredOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-[#D5EFE3]/50 font-mono">
+                      <td colSpan={8} className="py-8 text-center text-[#D5EFE3]/50 font-mono">
                         No orders matching filter criteria.
                       </td>
                     </tr>
                   ) : (
-                    filteredOrders.map(order => (
-                      <tr key={order.id} className="hover:bg-[#0C2A1E]/50 transition">
-                        <td className="py-3 px-4 font-mono">
-                          <div className="font-bold text-white">{order.id}</div>
-                          <div className="text-[10px] text-[#D5EFE3]/50">
-                            {new Date(order.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                          </div>
-                        </td>
+                    filteredOrders.map(order => {
+                      const method = order.payment_method || 'usdt_trc20';
+                      return (
+                        <tr key={order.id} className="hover:bg-[#0C2A1E]/50 transition">
+                          <td className="py-3 px-4 font-mono">
+                            <div className="font-bold text-white">{order.id}</div>
+                            <div className="text-[10px] text-[#D5EFE3]/50">
+                              {new Date(order.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                            </div>
+                          </td>
 
-                        <td className="py-3 px-4 font-medium text-white">
-                          {order.user_email}
-                        </td>
+                          <td className="py-3 px-4 font-medium text-white">
+                            {order.user_email}
+                          </td>
 
-                        <td className="py-3 px-4 font-mono font-bold text-emerald-400">
-                          {order.amount_usdt}.00 USDT
-                        </td>
+                          <td className="py-3 px-4">
+                            {method === 'btc' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                BTC
+                              </span>
+                            ) : method === 'ltc' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                                LTC
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                USDT (TRC20)
+                              </span>
+                            )}
+                          </td>
 
-                        <td className="py-3 px-4 font-mono font-bold text-[#FF5C00]">
-                          +{order.tokens_to_credit}
-                        </td>
+                          <td className="py-3 px-4 font-mono">
+                            <div className="font-bold text-emerald-400">
+                              {order.crypto_amount 
+                                ? `${order.crypto_amount} ${order.crypto_currency || (method === 'btc' ? 'BTC' : method === 'ltc' ? 'LTC' : 'USDT')}`
+                                : `${order.amount_usdt}.00 USDT`}
+                            </div>
+                            {method !== 'usdt_trc20' && (
+                              <div className="text-[10px] text-[#D5EFE3]/50">(${order.amount_usdt} USD)</div>
+                            )}
+                          </td>
 
-                        <td className="py-3 px-4 font-mono">
-                          {order.tx_hash ? (
-                            <a
-                              href={`https://tronscan.org/#/transaction/${order.tx_hash}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[#FF5C00] hover:underline flex items-center gap-1 font-bold"
-                              title={order.tx_hash}
-                            >
-                              <span>{order.tx_hash.substring(0, 10)}...{order.tx_hash.substring(order.tx_hash.length - 6)}</span>
-                              <ExternalLink className="h-3 w-3 shrink-0" />
-                            </a>
-                          ) : (
-                            <span className="text-[#D5EFE3]/40 italic">Awaiting TxID</span>
-                          )}
-                        </td>
+                          <td className="py-3 px-4 font-mono font-bold text-[#FF5C00]">
+                            +{order.tokens_to_credit}
+                          </td>
 
-                        <td className="py-3 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono ${
-                              order.status === 'approved'
-                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
-                                : order.status === 'verifying'
-                                ? 'bg-amber-950 text-amber-300 border border-amber-500/40'
-                                : order.status === 'rejected'
-                                ? 'bg-red-950 text-red-300 border border-red-500/40'
-                                : 'bg-[#041A10] text-[#D5EFE3]/70 border border-[#1A4B36]'
-                            }`}
-                          >
-                            {order.status === 'approved' && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
-                            {order.status === 'verifying' && <Clock className="h-3 w-3 text-amber-400 animate-spin" />}
-                            {order.status === 'rejected' && <XCircle className="h-3 w-3 text-red-400" />}
-                            <span className="uppercase">{order.status.replace('_', ' ')}</span>
-                          </span>
-                        </td>
+                          <td className="py-3 px-4 font-mono">
+                            {order.tx_hash ? (
+                              <div className="flex flex-col gap-0.5">
+                                <a
+                                  href={getAdminExplorerUrl(order.tx_hash, order.payment_method)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[#FF5C00] hover:underline flex items-center gap-1 font-bold"
+                                  title={`${getAdminExplorerName(order.payment_method)}: ${order.tx_hash}`}
+                                >
+                                  <span>{order.tx_hash.substring(0, 8)}...{order.tx_hash.substring(order.tx_hash.length - 6)}</span>
+                                  <ExternalLink className="h-3 w-3 shrink-0" />
+                                </a>
+                                <span className="text-[9px] text-[#D5EFE3]/40">
+                                  {getAdminExplorerName(order.payment_method)}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[#D5EFE3]/40 italic">Awaiting TxID</span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col gap-1 items-start">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono ${
+                                  order.status === 'approved'
+                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                                    : order.status === 'verifying'
+                                    ? 'bg-amber-950 text-amber-300 border border-amber-500/40'
+                                    : order.status === 'rejected'
+                                    ? 'bg-red-950 text-red-300 border border-red-500/40'
+                                    : 'bg-[#041A10] text-[#D5EFE3]/70 border border-[#1A4B36]'
+                                }`}
+                              >
+                                {order.status === 'approved' && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
+                                {order.status === 'verifying' && <Clock className="h-3 w-3 text-amber-400 animate-spin" />}
+                                {order.status === 'rejected' && <XCircle className="h-3 w-3 text-red-400" />}
+                                <span className="uppercase">{order.status.replace('_', ' ')}</span>
+                              </span>
+                              {order.verification_note && order.verification_note.toLowerCase().includes('auto') && (
+                                <span className="text-[9px] text-emerald-400 font-mono flex items-center gap-0.5">
+                                  <Zap className="h-2.5 w-2.5" /> Auto-Approved
+                                </span>
+                              )}
+                            </div>
+                          </td>
 
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
@@ -586,8 +787,9 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
                           </div>
                         </td>
                       </tr>
-                    ))
-                  )}
+                    );
+                  })
+                )}
                 </tbody>
               </table>
             </div>
@@ -737,194 +939,932 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
           </div>
         )}
 
-        {/* TAB 3: TOKEN PACKAGES MANAGEMENT */}
+        {/* TAB 3: TOKEN PACKAGES & RATE MANAGEMENT */}
         {activeTab === 'packages' && (
-          <div className="flex flex-col gap-6">
-            
-            {/* Header and Quick Actions */}
-            <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+          <AdminPackagePricingManager
+            packages={packages}
+            setPackages={setPackages}
+            showToast={showToast}
+            onOpenEditModal={handleOpenEditPackage}
+            onOpenCreateModal={handleOpenCreatePackage}
+          />
+        )}
+
+        {/* TAB 4: CRYPTO DEPOSIT GATEWAYS & WALLET CONFIGURATION */}
+        {activeTab === 'gateway' && (
+          <form onSubmit={handleSaveGatewaySettings} className="flex flex-col gap-6">
+            <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-6 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <h3 className="text-base font-bold text-white font-sans flex items-center gap-2">
-                  <Boxes className="h-5 w-5 text-[#FF5C00]" />
-                  <span>Barcode Packages & Pricing Gateway</span>
+                <h3 className="text-lg font-bold text-white font-sans flex items-center gap-2">
+                  <Wallet className="h-5 w-5 text-[#FF5C00]" />
+                  <span>Crypto Deposit Gateways & Automated Approval</span>
                 </h3>
-                <p className="text-xs text-[#D5EFE3]/70 font-sans mt-0.5">
-                  Configure barcode bundles, USDT rates, bonus tiers, and featured packages available for clients during checkout.
+                <p className="text-xs text-[#D5EFE3]/70 font-sans mt-1">
+                  Configure receiving wallet addresses for USDT (TRC-20), Bitcoin (BTC), and Litecoin (LTC). Transactions are automatically verified on-chain and approved.
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={handleResetPackages}
-                  className="px-3 py-2 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white rounded-xl text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer"
-                  title="Reset to default packages"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  <span>Reset Defaults</span>
-                </button>
-
-                <button
-                  onClick={handleSaveAndSyncAllPackages}
-                  disabled={isSyncingPackages}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold font-sans transition flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95 border border-emerald-400/30"
-                  title="Save current catalog and push real-time sync to all customer devices"
-                >
-                  <CheckCircle2 className={`h-4 w-4 ${isSyncingPackages ? 'animate-spin' : ''}`} />
-                  <span>{isSyncingPackages ? 'Syncing to Portal...' : 'Save & Sync to Customer Portal'}</span>
-                </button>
-
-                <button
-                  onClick={handleOpenCreatePackage}
-                  className="px-4 py-2 bg-[#FF5C00] hover:bg-[#FF731E] text-white rounded-xl text-xs font-bold font-sans transition flex items-center gap-2 cursor-pointer shadow-md active:scale-95"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>+ Add New Package</span>
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={isSavingGateway}
+                className="px-5 py-2.5 bg-[#FF5C00] hover:bg-[#FF731E] disabled:opacity-50 text-white rounded-xl text-xs font-bold font-sans transition flex items-center gap-2 shadow-[0_4px_14px_rgba(255,92,0,0.35)] cursor-pointer shrink-0"
+              >
+                {isSavingGateway ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    <span>Save Gateway Settings</span>
+                  </>
+                )}
+              </button>
             </div>
 
-            {/* Packages Summary Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-[#082216]/90 border border-[#1A4B36] rounded-xl p-3.5 flex flex-col">
-                <span className="text-[10px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Total Bundles</span>
-                <span className="text-xl font-black text-white font-mono mt-1">{packages.length}</span>
-              </div>
-              <div className="bg-[#082216]/90 border border-[#1A4B36] rounded-xl p-3.5 flex flex-col">
-                <span className="text-[10px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Live in Checkout</span>
-                <span className="text-xl font-black text-emerald-400 font-mono mt-1">
-                  {packages.filter(p => p.enabled !== false).length}
-                </span>
-              </div>
-              <div className="bg-[#082216]/90 border border-[#1A4B36] rounded-xl p-3.5 flex flex-col">
-                <span className="text-[10px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Featured Package</span>
-                <span className="text-xs font-bold text-[#FF5C00] truncate mt-1.5">
-                  {packages.find(p => p.popular)?.label || 'None set'}
-                </span>
-              </div>
-              <div className="bg-[#082216]/90 border border-[#1A4B36] rounded-xl p-3.5 flex flex-col">
-                <span className="text-[10px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Entry USDT Level</span>
-                <span className="text-xl font-black text-[#D5EFE3] font-mono mt-1">
-                  {Math.min(...packages.map(p => p.usdt))} USDT
-                </span>
-              </div>
-            </div>
-
-            {/* Packages Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {packages.map(pkg => {
-                const ratio = (pkg.tokens / pkg.usdt).toFixed(2);
-                const isEnabled = pkg.enabled !== false;
-
-                return (
-                  <div
-                    key={pkg.id}
-                    className={`bg-[#082216] border rounded-2xl p-5 flex flex-col justify-between relative transition shadow-md ${
-                      pkg.popular 
-                        ? 'border-[#FF5C00] shadow-[0_0_15px_rgba(255,92,0,0.2)]' 
-                        : isEnabled ? 'border-[#1A4B36]' : 'border-[#1A4B36]/40 opacity-70'
-                    }`}
-                  >
-                    {/* Header Badges */}
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      <div className="flex items-center gap-1.5">
-                        {pkg.popular && (
-                          <span className="bg-[#FF5C00] text-white text-[9px] font-black px-2 py-0.5 rounded font-mono flex items-center gap-1 shadow-sm">
-                            <Star className="h-2.5 w-2.5 fill-current" />
-                            POPULAR
-                          </span>
-                        )}
-                        <span
-                          className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase border ${
-                            isEnabled 
-                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' 
-                              : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-                          }`}
-                        >
-                          {isEnabled ? 'Active' : 'Disabled'}
-                        </span>
+            {/* Wallets Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              
+              {/* 1. TRON USDT GATEWAY */}
+              <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-5 flex flex-col justify-between gap-4 shadow-sm">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs border border-emerald-500/30">
+                        TRC
                       </div>
-
-                      <button
-                        onClick={() => handleTogglePopular(pkg)}
-                        className={`p-1 rounded hover:bg-[#103825] transition cursor-pointer ${
-                          pkg.popular ? 'text-[#FF5C00]' : 'text-[#D5EFE3]/40 hover:text-white'
-                        }`}
-                        title={pkg.popular ? 'Remove Popular badge' : 'Set as Popular badge'}
-                      >
-                        <Star className={`h-4 w-4 ${pkg.popular ? 'fill-current' : ''}`} />
-                      </button>
-                    </div>
-
-                    {/* Main Package Details */}
-                    <div>
-                      <h4 className="text-sm font-bold text-white font-sans">{pkg.label}</h4>
-                      
-                      <div className="mt-2 flex items-baseline gap-1.5 font-mono">
-                        <span className="text-3xl font-black text-[#FF5C00]">{pkg.tokens}</span>
-                        <span className="text-xs text-[#D5EFE3]/70 font-sans font-bold">Barcodes</span>
-                      </div>
-
-                      <div className="mt-2 pt-2 border-t border-[#1A4B36]/60 flex items-center justify-between text-xs font-mono">
-                        <span className="text-white font-bold">{pkg.usdt} USDT</span>
-                        <span className="text-[11px] text-emerald-400 font-sans font-bold">{pkg.bonus || `1 USDT = ${ratio} Barcodes`}</span>
-                      </div>
-
-                      {pkg.description && (
-                        <p className="text-[11px] text-[#D5EFE3]/60 font-sans mt-2 line-clamp-2">
-                          {pkg.description}
-                        </p>
-                      )}
-
-                      <div className="mt-2 text-[10px] font-mono text-[#D5EFE3]/50 bg-[#041A10] p-1.5 rounded border border-[#1A4B36]/40">
-                        Effective: {ratio} barcodes per 1 USDT
+                      <div>
+                        <h4 className="text-sm font-bold text-white font-sans">TRON USDT (TRC-20)</h4>
+                        <span className="text-[10px] text-emerald-400 font-mono">Tether TRON Network</span>
                       </div>
                     </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Live
+                    </span>
+                  </div>
 
-                    {/* Card Actions Footer */}
-                    <div className="mt-4 pt-3 border-t border-[#1A4B36] flex items-center justify-between gap-1.5">
-                      <button
-                        onClick={() => handleOpenEditPackage(pkg)}
-                        className="px-2.5 py-1.5 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer flex-1 justify-center"
-                      >
-                        <Edit3 className="h-3 w-3 text-[#FF5C00]" />
-                        <span>Edit</span>
-                      </button>
+                  <label className="block text-xs font-mono font-bold text-[#D5EFE3]/70 mb-1.5">
+                    Deposit Receiving Address:
+                  </label>
+                  <input
+                    type="text"
+                    value={gatewayTronAddress}
+                    onChange={e => setGatewayTronAddress(e.target.value)}
+                    placeholder="e.g. TYDzsYUE29eAQfMnA7WPZcaK5f46zMPwnT"
+                    className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-3 py-2.5 text-xs font-mono outline-none"
+                    required
+                  />
 
-                      <button
-                        onClick={() => handleTogglePackageEnabled(pkg)}
-                        className={`p-1.5 rounded-lg border text-xs transition cursor-pointer ${
-                          isEnabled 
-                            ? 'bg-emerald-950/60 hover:bg-emerald-900/60 border-emerald-500/40 text-emerald-300' 
-                            : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 text-zinc-400'
-                        }`}
-                        title={isEnabled ? 'Disable in checkout' : 'Enable in checkout'}
-                      >
-                        {isEnabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
-                      </button>
-
-                      <button
-                        onClick={() => handleDeletePackage(pkg.id, pkg.label)}
-                        className="p-1.5 bg-red-950/60 hover:bg-red-800 border border-red-500/30 text-red-300 rounded-lg text-xs transition cursor-pointer"
-                        title="Delete package"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                  <div className="mt-3 text-[11px] text-[#D5EFE3]/60 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Explorer:</span>
+                      <span className="text-white font-mono">Tronscan API</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Verification Method:</span>
+                      <span className="text-emerald-400 font-mono font-bold">Automated On-Chain</span>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+
+                <div className="pt-3 border-t border-[#1A4B36] flex items-center justify-between">
+                  <a
+                    href={`https://tronscan.org/#/address/${gatewayTronAddress}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-[#FF5C00] hover:underline flex items-center gap-1 font-bold"
+                  >
+                    <span>View on Tronscan</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </div>
+
+              {/* 2. BITCOIN (BTC) GATEWAY */}
+              <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-5 flex flex-col justify-between gap-4 shadow-sm">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs border border-amber-500/30">
+                        BTC
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white font-sans">Bitcoin (BTC)</h4>
+                        <span className="text-[10px] text-amber-400 font-mono">Native Bitcoin Network</span>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Live
+                    </span>
+                  </div>
+
+                  <label className="block text-xs font-mono font-bold text-[#D5EFE3]/70 mb-1.5">
+                    Deposit Receiving Address:
+                  </label>
+                  <input
+                    type="text"
+                    value={gatewayBtcAddress}
+                    onChange={e => setGatewayBtcAddress(e.target.value)}
+                    placeholder="e.g. bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el"
+                    className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-3 py-2.5 text-xs font-mono outline-none"
+                    required
+                  />
+
+                  <div className="mt-3 text-[11px] text-[#D5EFE3]/60 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Explorers:</span>
+                      <span className="text-white font-mono">Mempool & Blockstream</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Verification Method:</span>
+                      <span className="text-amber-400 font-mono font-bold">Automated On-Chain</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-[#1A4B36] flex items-center justify-between">
+                  <a
+                    href={`https://mempool.space/address/${gatewayBtcAddress}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-[#FF5C00] hover:underline flex items-center gap-1 font-bold"
+                  >
+                    <span>View on Mempool.space</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </div>
+
+              {/* 3. LITECOIN (LTC) GATEWAY */}
+              <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-5 flex flex-col justify-between gap-4 shadow-sm">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-xs border border-blue-500/30">
+                        LTC
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white font-sans">Litecoin (LTC)</h4>
+                        <span className="text-[10px] text-blue-400 font-mono">Litecoin Network</span>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                      Live
+                    </span>
+                  </div>
+
+                  <label className="block text-xs font-mono font-bold text-[#D5EFE3]/70 mb-1.5">
+                    Deposit Receiving Address:
+                  </label>
+                  <input
+                    type="text"
+                    value={gatewayLtcAddress}
+                    onChange={e => setGatewayLtcAddress(e.target.value)}
+                    placeholder="e.g. ltc1qrgp00e57s2y3q43f5h3r8gq3g25k7e68d9w4h5"
+                    className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-3 py-2.5 text-xs font-mono outline-none"
+                    required
+                  />
+
+                  <div className="mt-3 text-[11px] text-[#D5EFE3]/60 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Explorers:</span>
+                      <span className="text-white font-mono">Litecoinspace & Blockcypher</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Verification Method:</span>
+                      <span className="text-blue-400 font-mono font-bold">Automated On-Chain</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-[#1A4B36] flex items-center justify-between">
+                  <a
+                    href={`https://litecoinspace.org/address/${gatewayLtcAddress}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-[#FF5C00] hover:underline flex items-center gap-1 font-bold"
+                  >
+                    <span>View on Litecoinspace</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </div>
+
             </div>
 
-            {/* Live Client Preview Note */}
-            <div className="bg-[#041A10] border border-[#1A4B36] rounded-2xl p-4 flex items-center gap-3 text-xs text-[#D5EFE3]/80">
-              <div className="p-2 bg-[#FF5C00]/20 text-[#FF5C00] rounded-xl shrink-0">
-                <Sparkles className="h-5 w-5" />
+            {/* Automated Approval Engine Settings */}
+            <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-6 shadow-sm flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                    <Zap className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-white font-sans">
+                      Automated Approval & Real-Time Barcode Crediting
+                    </h4>
+                    <p className="text-xs text-[#D5EFE3]/70 font-sans">
+                      Instant barcode crediting upon public on-chain verification of user transaction hash
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setGatewayAutoApproval(!gatewayAutoApproval)}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition flex items-center gap-2 cursor-pointer ${
+                    gatewayAutoApproval
+                      ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50'
+                      : 'bg-zinc-900 text-zinc-400 border-zinc-700'
+                  }`}
+                >
+                  {gatewayAutoApproval ? (
+                    <>
+                      <ToggleRight className="h-5 w-5 text-emerald-400" />
+                      <span>AUTO-APPROVAL ACTIVE</span>
+                    </>
+                  ) : (
+                    <>
+                      <ToggleLeft className="h-5 w-5 text-zinc-500" />
+                      <span>MANUAL APPROVAL ONLY</span>
+                    </>
+                  )}
+                </button>
               </div>
-              <div className="flex-1">
-                <span className="font-bold text-white block">Instant Live Synchronization</span>
-                <span>Any additions, price adjustments, or bonus updates will automatically appear in real-time on the client's TRC-20 deposit modal.</span>
+
+              <div className="bg-[#041A10] border border-[#1A4B36] rounded-xl p-4 text-xs text-[#D5EFE3]/80 space-y-2">
+                <p>
+                  <strong>How It Works:</strong> When clients choose USDT (TRC-20), Bitcoin (BTC), or Litecoin (LTC) and submit their transaction hash:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-[11px] text-[#D5EFE3]/70 font-mono">
+                  <li>The system queries decentralized blockchain indexers in real-time.</li>
+                  <li>It checks that the transaction recipient matches your configured receiving wallet address.</li>
+                  <li>It checks that the received amount corresponds to the package pricing.</li>
+                  <li>Upon positive on-chain confirmation, the order is immediately granted <strong>Automatic Approval</strong> and the client's barcode balance is credited in real time.</li>
+                </ul>
               </div>
             </div>
+
+            {/* Bottom Save Action */}
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={isSavingGateway}
+                className="px-6 py-3 bg-[#FF5C00] hover:bg-[#FF731E] disabled:opacity-50 text-white rounded-xl text-xs font-bold font-sans transition flex items-center gap-2 shadow-[0_4px_16px_rgba(255,92,0,0.4)] cursor-pointer"
+              >
+                {isSavingGateway ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Saving Gateways...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    <span>Save & Deploy Gateway Wallets</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* TAB 5: ACCOUNT & BILLING MANAGEMENT */}
+        {activeTab === 'billing' && (
+          <div className="flex flex-col gap-8">
+            
+            {/* Top Overview & Metric Banner */}
+            <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-6 shadow-xl flex flex-col gap-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white font-sans flex items-center gap-2">
+                    <CreditCard className="h-5 w-5 text-[#FF5C00]" />
+                    <span>Account & Billing Management</span>
+                  </h2>
+                  <p className="text-xs text-[#D5EFE3]/70 font-sans mt-1">
+                    Centralized hub for manual client balance overrides, incoming crypto deposit tracking, and real-time active package configuration.
+                  </p>
+                </div>
+
+                {/* Sub-Section Jump Selector */}
+                <div className="flex items-center gap-1.5 bg-[#041A10] p-1.5 rounded-xl border border-[#1A4B36] text-xs font-mono">
+                  <button
+                    type="button"
+                    onClick={() => setBillingSection('all')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                      billingSection === 'all'
+                        ? 'bg-[#FF5C00] text-white'
+                        : 'text-[#D5EFE3]/70 hover:text-white'
+                    }`}
+                  >
+                    All Sections
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingSection('override')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                      billingSection === 'override'
+                        ? 'bg-[#FF5C00] text-white'
+                        : 'text-[#D5EFE3]/70 hover:text-white'
+                    }`}
+                  >
+                    Balance Overrides
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingSection('history')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                      billingSection === 'history'
+                        ? 'bg-[#FF5C00] text-white'
+                        : 'text-[#D5EFE3]/70 hover:text-white'
+                    }`}
+                  >
+                    Deposit History
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingSection('packages')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                      billingSection === 'packages'
+                        ? 'bg-[#FF5C00] text-white'
+                        : 'text-[#D5EFE3]/70 hover:text-white'
+                    }`}
+                  >
+                    Active Packages
+                  </button>
+                </div>
+              </div>
+
+              {/* KPI Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-[#041A10] border border-[#1A4B36] rounded-xl p-4 flex flex-col justify-between">
+                  <span className="text-[11px] font-mono text-[#D5EFE3]/60 uppercase tracking-wider">Total Crypto Volume</span>
+                  <div className="text-xl font-bold font-mono text-emerald-400 mt-2">
+                    ${totalUsdt.toLocaleString()}.00 <span className="text-xs text-[#D5EFE3]/60">USD</span>
+                  </div>
+                  <span className="text-[10px] text-[#D5EFE3]/40 mt-1 font-mono">{totalApprovedOrders} approved deposits</span>
+                </div>
+
+                <div className="bg-[#041A10] border border-[#1A4B36] rounded-xl p-4 flex flex-col justify-between">
+                  <span className="text-[11px] font-mono text-[#D5EFE3]/60 uppercase tracking-wider">Circulating Barcodes</span>
+                  <div className="text-xl font-bold font-mono text-[#FF5C00] mt-2">
+                    {totalCirculatingBarcodes.toLocaleString()} <span className="text-xs text-[#D5EFE3]/60">Units</span>
+                  </div>
+                  <span className="text-[10px] text-[#D5EFE3]/40 mt-1 font-mono">Held across {users.length} accounts</span>
+                </div>
+
+                <div className="bg-[#041A10] border border-[#1A4B36] rounded-xl p-4 flex flex-col justify-between">
+                  <span className="text-[11px] font-mono text-[#D5EFE3]/60 uppercase tracking-wider">Active Client Accounts</span>
+                  <div className="text-xl font-bold font-mono text-white mt-2">
+                    {users.length} <span className="text-xs text-[#D5EFE3]/60">Users</span>
+                  </div>
+                  <span className="text-[10px] text-[#D5EFE3]/40 mt-1 font-mono">Real-time sync enabled</span>
+                </div>
+
+                <div className="bg-[#041A10] border border-[#1A4B36] rounded-xl p-4 flex flex-col justify-between">
+                  <span className="text-[11px] font-mono text-[#D5EFE3]/60 uppercase tracking-wider">Active Packages</span>
+                  <div className="text-xl font-bold font-mono text-amber-400 mt-2">
+                    {activePackagesCount} <span className="text-xs text-[#D5EFE3]/60">Live Tiers</span>
+                  </div>
+                  <span className="text-[10px] text-[#D5EFE3]/40 mt-1 font-mono">{packages.length} total tiers configured</span>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 1: MANUAL USER BALANCE OVERRIDE */}
+            {(billingSection === 'all' || billingSection === 'override') && (
+              <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-6 shadow-xl flex flex-col gap-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1A4B36] pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#FF5C00]/20 text-[#FF5C00] flex items-center justify-center border border-[#FF5C00]/30">
+                      <SlidersHorizontal className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white font-sans">
+                        Manual User Balance Override & Account Adjustment
+                      </h3>
+                      <p className="text-xs text-[#D5EFE3]/70 font-sans">
+                        Force-set, credit, or debit any client's barcode balance with real-time propagation across active portal sessions.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 self-start sm:self-center">
+                    Instant Live Push
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  
+                  {/* Left Column: Override Form & Controls */}
+                  <form onSubmit={handleApplyManualOverride} className="lg:col-span-5 bg-[#041A10] border border-[#1A4B36] rounded-xl p-5 flex flex-col gap-4">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#FF5C00] font-mono flex items-center gap-1.5">
+                      <Zap className="h-3.5 w-3.5" />
+                      <span>Balance Override Console</span>
+                    </h4>
+
+                    {/* Target User Selector */}
+                    <div>
+                      <label className="block text-xs font-bold text-[#D5EFE3]/80 font-mono mb-1.5">
+                        Select Target Client Account *
+                      </label>
+                      <select
+                        value={overrideUserId}
+                        onChange={e => setOverrideUserId(e.target.value)}
+                        className="w-full bg-[#082216] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-3 py-2.5 text-xs font-mono outline-none cursor-pointer"
+                        required
+                      >
+                        <option value="">-- Choose Client Account --</option>
+                        {users.map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.id} {u.email !== u.id ? `(${u.email})` : ''} — Current: {u.token_balance} Barcodes
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Selected User Quick Preview */}
+                    {(() => {
+                      const sel = users.find(u => u.id === overrideUserId);
+                      if (!sel) return null;
+                      const selAmt = Math.max(0, Number(overrideAmount) || 0);
+                      const projected = overrideMode === 'set' 
+                        ? selAmt 
+                        : overrideMode === 'add' 
+                        ? sel.token_balance + selAmt 
+                        : Math.max(0, sel.token_balance - selAmt);
+
+                      return (
+                        <div className="bg-[#082216] border border-[#1A4B36] rounded-xl p-3 text-xs font-mono space-y-1">
+                          <div className="flex justify-between">
+                            <span className="text-[#D5EFE3]/60">Current Balance:</span>
+                            <span className="font-bold text-white">{sel.token_balance} Barcodes</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#D5EFE3]/60">Override Mode:</span>
+                            <span className="text-[#FF5C00] font-bold uppercase">{overrideMode}</span>
+                          </div>
+                          <div className="flex justify-between border-t border-[#1A4B36] pt-1 mt-1">
+                            <span className="text-emerald-400 font-bold">Projected New Balance:</span>
+                            <span className="text-emerald-400 font-black text-sm">{projected} Barcodes</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Mode Selector */}
+                    <div>
+                      <label className="block text-xs font-bold text-[#D5EFE3]/80 font-mono mb-1.5">
+                        Adjustment Action *
+                      </label>
+                      <div className="grid grid-cols-3 gap-2 text-xs font-mono">
+                        <button
+                          type="button"
+                          onClick={() => setOverrideMode('set')}
+                          className={`py-2 px-2 rounded-lg font-bold border transition cursor-pointer text-center ${
+                            overrideMode === 'set'
+                              ? 'bg-[#FF5C00] text-white border-[#FF5C00]'
+                              : 'bg-[#082216] text-[#D5EFE3]/70 border-[#1A4B36] hover:bg-[#103825]'
+                          }`}
+                        >
+                          Set Exact
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOverrideMode('add')}
+                          className={`py-2 px-2 rounded-lg font-bold border transition cursor-pointer text-center ${
+                            overrideMode === 'add'
+                              ? 'bg-emerald-600 text-white border-emerald-500'
+                              : 'bg-[#082216] text-[#D5EFE3]/70 border-[#1A4B36] hover:bg-[#103825]'
+                          }`}
+                        >
+                          + Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOverrideMode('subtract')}
+                          className={`py-2 px-2 rounded-lg font-bold border transition cursor-pointer text-center ${
+                            overrideMode === 'subtract'
+                              ? 'bg-red-700 text-white border-red-600'
+                              : 'bg-[#082216] text-[#D5EFE3]/70 border-[#1A4B36] hover:bg-[#103825]'
+                          }`}
+                        >
+                          - Deduct
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Barcode Amount & Presets */}
+                    <div>
+                      <label className="block text-xs font-bold text-[#D5EFE3]/80 font-mono mb-1.5">
+                        Barcode Units *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={overrideAmount}
+                        onChange={e => setOverrideAmount(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        className="w-full bg-[#082216] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-3 py-2 text-sm font-mono font-bold outline-none"
+                        required
+                      />
+
+                      {/* Quick Presets */}
+                      <div className="flex items-center gap-1.5 mt-2 flex-wrap text-[11px] font-mono">
+                        <span className="text-[#D5EFE3]/50">Presets:</span>
+                        {[10, 25, 50, 100, 250, 500].map(val => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setOverrideAmount(val)}
+                            className="px-2 py-0.5 rounded bg-[#082216] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] hover:text-white transition cursor-pointer"
+                          >
+                            {val}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Reason / Audit Note */}
+                    <div>
+                      <label className="block text-xs font-bold text-[#D5EFE3]/80 font-mono mb-1.5">
+                        Audit Note / Reason for Override
+                      </label>
+                      <input
+                        type="text"
+                        value={overrideReason}
+                        onChange={e => setOverrideReason(e.target.value)}
+                        placeholder="e.g. VIP deposit credit, customer support adjustment..."
+                        className="w-full bg-[#082216] border border-[#1A4B36] focus:border-[#FF5C00] text-white rounded-xl px-3 py-2 text-xs font-mono outline-none"
+                      />
+                    </div>
+
+                    {/* Apply Button */}
+                    <button
+                      type="submit"
+                      disabled={isApplyingOverride || !overrideUserId}
+                      className="w-full py-3 bg-[#FF5C00] hover:bg-[#FF731E] disabled:opacity-50 text-white rounded-xl text-xs font-bold font-sans transition flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(255,92,0,0.35)] cursor-pointer mt-1"
+                    >
+                      {isApplyingOverride ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          <span>Applying Override...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-4 w-4" />
+                          <span>Apply Balance Override</span>
+                        </>
+                      )}
+                    </button>
+                  </form>
+
+                  {/* Right Column: User Accounts Table & Direct Inline Actions */}
+                  <div className="lg:col-span-7 flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={billingUserSearch}
+                          onChange={e => setBillingUserSearch(e.target.value)}
+                          placeholder="Filter accounts by Unique ID, email, or role..."
+                          className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-[#D5EFE3] text-xs rounded-xl pl-9 pr-4 py-2 font-mono outline-none"
+                        />
+                        <Search className="h-4 w-4 text-[#D5EFE3]/40 absolute left-3 top-2.5" />
+                      </div>
+                      <span className="text-[11px] font-mono text-[#D5EFE3]/60 shrink-0">
+                        {filteredBillingUsers.length} accounts
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-xl border border-[#1A4B36] max-h-[380px] overflow-y-auto">
+                      <table className="w-full text-left text-xs font-sans">
+                        <thead className="bg-[#041A10] text-[#D5EFE3]/70 font-mono uppercase tracking-wider text-[10px] border-b border-[#1A4B36] sticky top-0 z-10">
+                          <tr>
+                            <th className="py-2.5 px-3">Unique Client ID</th>
+                            <th className="py-2.5 px-3">Role</th>
+                            <th className="py-2.5 px-3">Current Balance</th>
+                            <th className="py-2.5 px-3 text-right">Quick Override</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#1A4B36]/60 bg-[#082216]">
+                          {filteredBillingUsers.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="py-8 text-center text-[#D5EFE3]/50 font-mono">
+                                No accounts found matching search.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredBillingUsers.map(u => {
+                              const isSelected = u.id === overrideUserId;
+                              return (
+                                <tr 
+                                  key={u.id} 
+                                  className={`hover:bg-[#0C2A1E]/50 transition cursor-pointer ${
+                                    isSelected ? 'bg-[#FF5C00]/10 border-l-2 border-[#FF5C00]' : ''
+                                  }`}
+                                  onClick={() => setOverrideUserId(u.id)}
+                                >
+                                  <td className="py-2.5 px-3 font-mono">
+                                    <div className="font-bold text-white flex items-center gap-1.5">
+                                      <span>{u.id}</span>
+                                      {isSelected && (
+                                        <span className="px-1.5 py-0.2 bg-[#FF5C00] text-white text-[9px] rounded font-mono font-bold">
+                                          SELECTED
+                                        </span>
+                                      )}
+                                    </div>
+                                    {u.email !== u.id && (
+                                      <div className="text-[10px] text-[#D5EFE3]/50">{u.email}</div>
+                                    )}
+                                  </td>
+
+                                  <td className="py-2.5 px-3">
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
+                                        u.role === 'admin'
+                                          ? 'bg-[#FF5C00]/20 text-[#FF5C00] border border-[#FF5C00]/40'
+                                          : 'bg-[#041A10] text-[#D5EFE3] border border-[#1A4B36]'
+                                      }`}
+                                    >
+                                      {u.role}
+                                    </span>
+                                  </td>
+
+                                  <td className="py-2.5 px-3 font-mono">
+                                    <span className="text-sm font-black text-[#FF5C00]">
+                                      {u.token_balance}
+                                    </span>
+                                    <span className="text-[10px] text-[#D5EFE3]/60 ml-1">barcodes</span>
+                                  </td>
+
+                                  <td className="py-2.5 px-3 text-right">
+                                    <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddTokens(u.id, 5)}
+                                        className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-white rounded text-[10px] font-mono font-bold transition cursor-pointer"
+                                        title="Quick credit +5 barcodes"
+                                      >
+                                        +5
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddTokens(u.id, 25)}
+                                        className="px-2 py-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-white rounded text-[10px] font-mono font-bold transition cursor-pointer"
+                                        title="Quick credit +25 barcodes"
+                                      >
+                                        +25
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetTokens(u.id, u.token_balance)}
+                                        className="p-1 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#FF5C00] rounded text-[10px] transition cursor-pointer"
+                                        title="Set exact custom balance"
+                                      >
+                                        <Edit3 className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 2: INCOMING CRYPTO DEPOSIT HISTORY */}
+            {(billingSection === 'all' || billingSection === 'history') && (
+              <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-6 shadow-xl flex flex-col gap-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1A4B36] pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                      <History className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white font-sans">
+                        Incoming Crypto Deposit History
+                      </h3>
+                      <p className="text-xs text-[#D5EFE3]/70 font-sans">
+                        Full auditable ledger of all customer deposits across USDT (TRC-20), Bitcoin (BTC), and Litecoin (LTC) networks.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-[#D5EFE3]/60">
+                      Showing {filteredBillingOrders.length} of {orders.length} deposits
+                    </span>
+                  </div>
+                </div>
+
+                {/* Filters */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="relative w-full sm:flex-1">
+                    <input
+                      type="text"
+                      value={billingDepositSearch}
+                      onChange={e => setBillingDepositSearch(e.target.value)}
+                      placeholder="Search by Order ID, TxID, or User ID / Email..."
+                      className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-[#FF5C00] text-[#D5EFE3] text-xs rounded-xl pl-9 pr-4 py-2 font-mono outline-none"
+                    />
+                    <Search className="h-4 w-4 text-[#D5EFE3]/40 absolute left-3 top-2.5" />
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                    <select
+                      value={billingDepositMethod}
+                      onChange={e => setBillingDepositMethod(e.target.value)}
+                      className="bg-[#041A10] border border-[#1A4B36] text-[#D5EFE3] text-xs font-bold font-mono rounded-xl px-3 py-2 outline-none cursor-pointer"
+                    >
+                      <option value="all">All Networks (USDT/BTC/LTC)</option>
+                      <option value="usdt_trc20">USDT (TRC-20)</option>
+                      <option value="btc">Bitcoin (BTC)</option>
+                      <option value="ltc">Litecoin (LTC)</option>
+                    </select>
+
+                    <select
+                      value={billingDepositStatus}
+                      onChange={e => setBillingDepositStatus(e.target.value)}
+                      className="bg-[#041A10] border border-[#1A4B36] text-[#D5EFE3] text-xs font-bold font-mono rounded-xl px-3 py-2 outline-none cursor-pointer"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="approved">Approved</option>
+                      <option value="verifying">Verifying On-Chain</option>
+                      <option value="pending_payment">Pending Payment</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Deposit Ledger Table */}
+                <div className="overflow-x-auto rounded-xl border border-[#1A4B36]">
+                  <table className="w-full text-left text-xs font-sans">
+                    <thead className="bg-[#041A10] text-[#D5EFE3]/70 font-mono uppercase tracking-wider text-[10px] border-b border-[#1A4B36]">
+                      <tr>
+                        <th className="py-3 px-4">Order ID & Date</th>
+                        <th className="py-3 px-4">User Account</th>
+                        <th className="py-3 px-4">Network</th>
+                        <th className="py-3 px-4">Crypto Amount</th>
+                        <th className="py-3 px-4">Barcodes</th>
+                        <th className="py-3 px-4">Transaction Hash (TxID)</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#1A4B36]/60 bg-[#082216]">
+                      {filteredBillingOrders.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-8 text-center text-[#D5EFE3]/50 font-mono">
+                            No deposit transactions matching filter criteria.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredBillingOrders.map(order => {
+                          const method = order.payment_method || 'usdt_trc20';
+                          return (
+                            <tr key={order.id} className="hover:bg-[#0C2A1E]/50 transition">
+                              <td className="py-3 px-4 font-mono">
+                                <div className="font-bold text-white">{order.id}</div>
+                                <div className="text-[10px] text-[#D5EFE3]/50">
+                                  {new Date(order.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                </div>
+                              </td>
+
+                              <td className="py-3 px-4 font-medium text-white font-mono">
+                                <div>{order.user_email}</div>
+                                {order.user_id && order.user_id !== order.user_email && (
+                                  <div className="text-[10px] text-[#D5EFE3]/40">{order.user_id}</div>
+                                )}
+                              </td>
+
+                              <td className="py-3 px-4">
+                                {method === 'btc' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                    BTC
+                                  </span>
+                                ) : method === 'ltc' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                                    LTC
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                    USDT (TRC20)
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="py-3 px-4 font-mono">
+                                <div className="font-bold text-emerald-400">
+                                  {order.crypto_amount 
+                                    ? `${order.crypto_amount} ${order.crypto_currency || (method === 'btc' ? 'BTC' : method === 'ltc' ? 'LTC' : 'USDT')}`
+                                    : `${order.amount_usdt}.00 USDT`}
+                                </div>
+                                {method !== 'usdt_trc20' && (
+                                  <div className="text-[10px] text-[#D5EFE3]/50">(${order.amount_usdt} USD)</div>
+                                )}
+                              </td>
+
+                              <td className="py-3 px-4 font-mono font-bold text-[#FF5C00]">
+                                +{order.tokens_to_credit}
+                              </td>
+
+                              <td className="py-3 px-4 font-mono">
+                                {order.tx_hash ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <a
+                                      href={getAdminExplorerUrl(order.tx_hash, order.payment_method)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[#FF5C00] hover:underline flex items-center gap-1 font-bold"
+                                      title={`${getAdminExplorerName(order.payment_method)}: ${order.tx_hash}`}
+                                    >
+                                      <span>{order.tx_hash.substring(0, 8)}...{order.tx_hash.substring(order.tx_hash.length - 6)}</span>
+                                      <ExternalLink className="h-3 w-3 shrink-0" />
+                                    </a>
+                                    <span className="text-[9px] text-[#D5EFE3]/40">
+                                      {getAdminExplorerName(order.payment_method)}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-[#D5EFE3]/40 italic">Awaiting TxID</span>
+                                )}
+                              </td>
+
+                              <td className="py-3 px-4">
+                                <div className="flex flex-col gap-1 items-start">
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono ${
+                                      order.status === 'approved'
+                                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                                        : order.status === 'verifying'
+                                        ? 'bg-amber-950 text-amber-300 border border-amber-500/40'
+                                        : order.status === 'rejected'
+                                        ? 'bg-red-950 text-red-300 border border-red-500/40'
+                                        : 'bg-[#041A10] text-[#D5EFE3]/70 border border-[#1A4B36]'
+                                    }`}
+                                  >
+                                    {order.status === 'approved' && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
+                                    {order.status === 'verifying' && <Clock className="h-3 w-3 text-amber-400 animate-spin" />}
+                                    {order.status === 'rejected' && <XCircle className="h-3 w-3 text-red-400" />}
+                                    <span className="uppercase">{order.status.replace('_', ' ')}</span>
+                                  </span>
+                                  {order.verification_note && order.verification_note.toLowerCase().includes('auto') && (
+                                    <span className="text-[9px] text-emerald-400 font-mono flex items-center gap-0.5">
+                                      <Zap className="h-2.5 w-2.5" /> Auto-Approved
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {order.status !== 'approved' && (
+                                    <button
+                                      onClick={() => handleForceApprove(order.id)}
+                                      className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold font-sans transition cursor-pointer flex items-center gap-1"
+                                      title="Manually force-approve and credit barcodes"
+                                    >
+                                      <Check className="h-3.5 w-3.5" />
+                                      <span>Approve</span>
+                                    </button>
+                                  )}
+                                  {order.status !== 'rejected' && (
+                                    <button
+                                      onClick={() => handleRejectOrder(order.id)}
+                                      className="p-1.5 bg-[#041A10] hover:bg-red-950/60 border border-[#1A4B36] hover:border-red-500/40 text-[#D5EFE3]/60 hover:text-red-300 rounded-lg text-xs transition cursor-pointer"
+                                      title="Reject order"
+                                    >
+                                      <XCircle className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 3: ACTIVE PACKAGE DETAILS & PRICING EDITOR */}
+            {(billingSection === 'all' || billingSection === 'packages') && (
+              <AdminPackagePricingManager
+                packages={packages}
+                setPackages={setPackages}
+                showToast={showToast}
+                onOpenEditModal={handleOpenEditPackage}
+                onOpenCreateModal={handleOpenCreatePackage}
+              />
+            )}
 
           </div>
         )}

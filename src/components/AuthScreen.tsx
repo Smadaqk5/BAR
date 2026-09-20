@@ -9,10 +9,14 @@ import {
   UserPlus, 
   Sparkles, 
   AlertTriangle, 
-  Clock
+  Clock,
+  Headphones,
+  Send,
+  MessageCircle
 } from 'lucide-react';
 import { PortalStore } from '../utils/portalStore';
 import { User as UserType } from '../types';
+import { SUPPORT_CONFIG } from '../constants';
 
 interface AuthScreenProps {
   onSuccess: (user: UserType) => void;
@@ -286,8 +290,39 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
           </div>
         </div>
 
+        {/* 24/7 Official Support Contacts */}
+        <div className="mt-5 p-3.5 bg-[#03130C] border border-[#1A4B36] rounded-2xl flex flex-col gap-2.5 text-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-white font-bold">
+              <Headphones className="h-4 w-4 text-emerald-400" />
+              <span>Official 24/7 Support Desk</span>
+            </div>
+            <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">Active</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+            <a
+              href={SUPPORT_CONFIG.telegram.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-2 bg-[#082216] hover:bg-[#103825] border border-cyan-500/30 hover:border-cyan-400 text-cyan-300 rounded-xl font-mono text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              <Send className="h-3 w-3" />
+              <span>Telegram: @kingof_kyc</span>
+            </a>
+            <a
+              href={SUPPORT_CONFIG.whatsapp.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-2 bg-[#082216] hover:bg-[#103825] border border-emerald-500/30 hover:border-emerald-400 text-emerald-300 rounded-xl font-mono text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              <MessageCircle className="h-3 w-3" />
+              <span>WhatsApp: +1 (414) 401-5805</span>
+            </a>
+          </div>
+        </div>
+
         {/* Footer info */}
-        <div className="mt-6 text-center text-[10px] text-[#D5EFE3]/40 font-mono flex items-center justify-center gap-1.5 pt-2">
+        <div className="mt-4 text-center text-[10px] text-[#D5EFE3]/40 font-mono flex items-center justify-center gap-1.5 pt-1">
           <Lock className="h-3 w-3" />
           <span>256-Bit Passwordless Authentication</span>
         </div>

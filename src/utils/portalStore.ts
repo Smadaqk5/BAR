@@ -1,5 +1,6 @@
-import { User, Order, OrderStatus, SavedClientProfile, TokenPackage } from '../types';
+import { User, Order, OrderStatus, PaymentMethod, SavedClientProfile, TokenPackage } from '../types';
 import { DEFAULT_TRON_DEPOSIT_ADDRESS, verifyTronTransaction } from './tronVerifier';
+import { DEFAULT_BTC_DEPOSIT_ADDRESS, DEFAULT_LTC_DEPOSIT_ADDRESS, verifyCryptoTransaction } from './cryptoVerifier';
 import { SupabaseService, isSupabaseConfigured } from './supabase';
 
 const USERS_KEY = 'bryt_portal_users';
@@ -12,8 +13,11 @@ const PACKAGES_VERSION_KEY = 'bryt_portal_packages_catalog_v3';
 
 export interface PortalSettings {
   depositAddress: string;
+  btcDepositAddress: string;
+  ltcDepositAddress: string;
   usdtContract: string;
   tokensPerUsdt: number;
+  autoApproval: boolean;
 }
 
 export const DEFAULT_PACKAGES: TokenPackage[] = [
@@ -27,8 +31,11 @@ export const DEFAULT_PACKAGES: TokenPackage[] = [
 
 const DEFAULT_SETTINGS: PortalSettings = {
   depositAddress: DEFAULT_TRON_DEPOSIT_ADDRESS,
+  btcDepositAddress: DEFAULT_BTC_DEPOSIT_ADDRESS,
+  ltcDepositAddress: DEFAULT_LTC_DEPOSIT_ADDRESS,
   usdtContract: 'TR7NHqjekKQxGTCi8q8ZY4pL8otSzgjLj6',
-  tokensPerUsdt: 1
+  tokensPerUsdt: 1,
+  autoApproval: true
 };
 
 const DEFAULT_USERS: User[] = [
@@ -58,17 +65,56 @@ export function generateUniqueId(): string {
 export const PortalStore = {
   getSettings(): PortalSettings {
     const envDepositAddress = (import.meta as any).env?.VITE_TRON_DEPOSIT_ADDRESS?.trim();
+    const envBtcAddress = (import.meta as any).env?.VITE_BTC_DEPOSIT_ADDRESS?.trim();
+    const envLtcAddress = (import.meta as any).env?.VITE_LTC_DEPOSIT_ADDRESS?.trim();
     const envUsdtContract = (import.meta as any).env?.VITE_TRON_USDT_CONTRACT?.trim();
+
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SETTINGS_KEY) : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          depositAddress: parsed.depositAddress || envDepositAddress || DEFAULT_TRON_DEPOSIT_ADDRESS,
+          btcDepositAddress: parsed.btcDepositAddress || envBtcAddress || DEFAULT_BTC_DEPOSIT_ADDRESS,
+          ltcDepositAddress: parsed.ltcDepositAddress || envLtcAddress || DEFAULT_LTC_DEPOSIT_ADDRESS,
+          usdtContract: parsed.usdtContract || envUsdtContract || 'TR7NHqjekKQxGTCi8q8ZY4pL8otSzgjLj6',
+          tokensPerUsdt: parsed.tokensPerUsdt || 1,
+          autoApproval: parsed.autoApproval !== undefined ? parsed.autoApproval : true
+        };
+      }
+    } catch {
+      // ignore JSON parse error
+    }
 
     return {
       depositAddress: envDepositAddress || DEFAULT_TRON_DEPOSIT_ADDRESS,
+      btcDepositAddress: envBtcAddress || DEFAULT_BTC_DEPOSIT_ADDRESS,
+      ltcDepositAddress: envLtcAddress || DEFAULT_LTC_DEPOSIT_ADDRESS,
       usdtContract: envUsdtContract || 'TR7NHqjekKQxGTCi8q8ZY4pL8otSzgjLj6',
-      tokensPerUsdt: 1
+      tokensPerUsdt: 1,
+      autoApproval: true
     };
   },
 
   saveSettings(settings: Partial<PortalSettings>): PortalSettings {
-    return this.getSettings();
+    const current = this.getSettings();
+    const updated: PortalSettings = {
+      ...current,
+      ...settings
+    };
+
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bryt_portal_settings_changed', { detail: updated }));
+      }
+    } catch (e) {
+      console.warn('Failed to save portal settings:', e);
+    }
+
+    return updated;
   },
 
   getPackages(): TokenPackage[] {
@@ -269,7 +315,14 @@ export const PortalStore = {
   },
 
   saveUsers(users: User[]): void {
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    try {
+      localStorage.setItem(USERS_KEY, JSON.stringify(users));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bryt_portal_users_changed', { detail: users }));
+      }
+    } catch (e) {
+      console.warn('Failed to save users:', e);
+    }
   },
 
   getCurrentUser(): User | null {
@@ -435,6 +488,12 @@ export const PortalStore = {
       this.setCurrentUser(users[idx]);
     }
 
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('bryt_portal_balance_updated', { 
+        detail: { userId: users[idx].id, balance: users[idx].token_balance } 
+      }));
+    }
+
     if (isSupabaseConfigured()) {
       SupabaseService.upsertUser(users[idx]).catch(console.error);
     }
@@ -470,16 +529,64 @@ export const PortalStore = {
 
   saveOrders(orders: Order[]): void {
     localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('bryt_portal_orders_changed', { detail: orders }));
+    }
   },
 
-  createOrder(userId: string, userEmail: string, amountUsdt: number, tokensToCredit: number): Order {
+  getUserOrders(userId: string): Order[] {
+    const all = this.getAllOrders();
+    return all.filter(o => o.user_id === userId || o.user_email === userId);
+  },
+
+  cancelOrder(orderId: string): boolean {
+    let orders = this.getAllOrders();
+    const target = orders.find(o => o.id === orderId);
+    if (!target) return false;
+
+    // Only allow cancelling orders that are not approved
+    if (target.status === 'approved') return false;
+
+    orders = orders.filter(o => o.id !== orderId);
+    this.saveOrders(orders);
+    return true;
+  },
+
+  createOrder(
+    userId: string, 
+    userEmail: string, 
+    amountUsdt: number, 
+    tokensToCredit: number,
+    paymentMethod: PaymentMethod = 'usdt_trc20',
+    cryptoAmount?: number,
+    cryptoCurrency?: 'USDT' | 'BTC' | 'LTC',
+    depositAddress?: string
+  ): Order {
     const orders = this.getAllOrders();
+    const settings = this.getSettings();
+
+    const resolvedAddress = depositAddress || (
+      paymentMethod === 'btc' 
+        ? settings.btcDepositAddress 
+        : paymentMethod === 'ltc' 
+        ? settings.ltcDepositAddress 
+        : settings.depositAddress
+    );
+
+    const resolvedCurrency = cryptoCurrency || (
+      paymentMethod === 'btc' ? 'BTC' : paymentMethod === 'ltc' ? 'LTC' : 'USDT'
+    );
+
     const newOrder: Order = {
       id: `ord-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
       user_id: userId,
       user_email: userEmail,
       amount_usdt: amountUsdt,
       tokens_to_credit: tokensToCredit,
+      payment_method: paymentMethod,
+      crypto_amount: cryptoAmount || amountUsdt,
+      crypto_currency: resolvedCurrency,
+      deposit_address: resolvedAddress,
       status: 'pending_payment',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -522,31 +629,49 @@ export const PortalStore = {
     }
 
     const settings = this.getSettings();
+    const method: PaymentMethod = order.payment_method || 'usdt_trc20';
 
-    // Verify against Tronscan
-    const verifyResult = await verifyTronTransaction(
+    const targetDepositAddress = order.deposit_address || (
+      method === 'btc'
+        ? settings.btcDepositAddress
+        : method === 'ltc'
+        ? settings.ltcDepositAddress
+        : settings.depositAddress
+    );
+
+    const targetCryptoAmount = order.crypto_amount || order.amount_usdt;
+
+    // Verify against on-chain blockchain explorer (TRON / Bitcoin / Litecoin)
+    const verifyResult = await verifyCryptoTransaction(
+      method,
       cleanHash,
       order.amount_usdt,
-      settings.depositAddress,
+      targetCryptoAmount,
+      targetDepositAddress,
       settings.usdtContract
     );
 
     if (verifyResult.valid) {
-      // Atomic approval & Token crediting
+      // Automatic Approval & Token crediting
       order.tx_hash = cleanHash;
       order.status = 'approved';
       order.verified_amount = verifyResult.amountReceived;
-      order.verification_note = `Verified on TRON. Received ${verifyResult.amountReceived} USDT.`;
+      order.verification_note = `Verified on ${verifyResult.currency}. Received ${verifyResult.amountReceived} ${verifyResult.currency}. Automatic approval granted.`;
       order.updated_at = new Date().toISOString();
 
       orders[orderIndex] = order;
       this.saveOrders(orders);
 
-      // Credit tokens to user
+      // Instantly credit tokens to user
       this.updateUserTokens(order.user_id, order.tokens_to_credit, true);
 
       if (isSupabaseConfigured()) {
         SupabaseService.upsertOrder(order).catch(console.error);
+      }
+
+      // Broadcast balance update event for instant reactivity
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bryt_portal_balance_updated', { detail: { userId: order.user_id } }));
       }
 
       return { success: true, order };
@@ -567,7 +692,7 @@ export const PortalStore = {
       return {
         success: false,
         order,
-        error: verifyResult.error || 'Unable to verify transaction on TRON blockchain.'
+        error: verifyResult.error || `Unable to verify transaction on ${method.toUpperCase()} network.`
       };
     }
   },

@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS public.portal_users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 2. TRC-20 Orders & Blockchain Deposits Table
+-- 2. Crypto Orders & Blockchain Deposits Table (USDT, BTC, LTC)
 CREATE TABLE IF NOT EXISTS public.trc20_orders (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES public.portal_users(id) ON DELETE CASCADE,
@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS public.trc20_orders (
   amount_usdt NUMERIC NOT NULL,
   tokens_to_credit INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending_payment',
+  payment_method TEXT DEFAULT 'usdt',
+  deposit_address TEXT,
   tx_hash TEXT,
   verified_amount NUMERIC,
   verification_note TEXT,
@@ -86,7 +88,9 @@ CREATE TABLE IF NOT EXISTS public.trc20_orders (
 CREATE TABLE IF NOT EXISTS public.portal_settings (
   id TEXT PRIMARY KEY DEFAULT 'global_settings',
   deposit_address TEXT NOT NULL,
-  usdt_contract TEXT NOT NULL,
+  btc_deposit_address TEXT,
+  ltc_deposit_address TEXT,
+  usdt_contract TEXT NOT NULL DEFAULT 'TR7NHqjekKQxGTCi8q8ZY4pL8otSzgjLj6',
   tokens_per_usdt INTEGER NOT NULL DEFAULT 1,
   packages JSONB,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -201,9 +205,22 @@ export const SupabaseService = {
     const client = getSupabaseClient();
     if (!client) return false;
     try {
+      const dbPayload = {
+        id: order.id,
+        user_id: order.user_id,
+        user_email: order.user_email,
+        amount_usdt: order.amount_usdt,
+        tokens_to_credit: order.tokens_to_credit,
+        tx_hash: order.tx_hash || null,
+        status: order.status,
+        verified_amount: order.verified_amount || null,
+        verification_note: order.verification_note || (order.payment_method ? `Method: ${order.payment_method.toUpperCase()}` : null),
+        created_at: order.created_at,
+        updated_at: order.updated_at
+      };
       const { error } = await client
         .from('trc20_orders')
-        .upsert(order);
+        .upsert(dbPayload);
       return !error;
     } catch (err) {
       console.warn('Supabase upsertOrder error:', err);
