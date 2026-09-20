@@ -28,7 +28,8 @@ import {
 } from 'lucide-react';
 import { Order, PaymentMethod, User } from '../types';
 import { PortalStore } from '../utils/portalStore';
-import { isValidTxHash } from '../utils/cryptoVerifier';
+import { isValidTxHash, DEFAULT_BTC_DEPOSIT_ADDRESS, DEFAULT_LTC_DEPOSIT_ADDRESS } from '../utils/cryptoVerifier';
+import { DEFAULT_TRON_DEPOSIT_ADDRESS } from '../utils/tronVerifier';
 import { SUPPORT_CONFIG } from '../constants';
 
 interface PendingTransactionsProps {
@@ -800,70 +801,81 @@ export const PendingTransactions: React.FC<PendingTransactionsProps> = ({
       </div>
 
       {/* QR CODE POPUP MODAL */}
-      {qrModalOrder && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#082216] border border-[#1A4B36] rounded-3xl w-full max-w-sm p-6 flex flex-col items-center gap-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between w-full border-b border-[#1A4B36] pb-3">
-              <span className="text-sm font-bold text-white font-sans">
-                Scan Receiving QR Code
+      {qrModalOrder && (() => {
+        const resolvedAddress = (
+          qrModalOrder.deposit_address ||
+          (qrModalOrder.payment_method === 'btc'
+            ? DEFAULT_BTC_DEPOSIT_ADDRESS
+            : qrModalOrder.payment_method === 'ltc'
+            ? DEFAULT_LTC_DEPOSIT_ADDRESS
+            : DEFAULT_TRON_DEPOSIT_ADDRESS)
+        ).trim();
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-[#082216] border border-[#1A4B36] rounded-3xl w-full max-w-sm p-6 flex flex-col items-center gap-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between w-full border-b border-[#1A4B36] pb-3">
+                <span className="text-sm font-bold text-white font-sans">
+                  Scan Receiving QR Code ({qrModalOrder.payment_method === 'btc' ? 'BTC' : qrModalOrder.payment_method === 'ltc' ? 'LTC' : 'USDT'})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setQrModalOrder(null)}
+                  className="text-[#D5EFE3]/60 hover:text-white p-1 rounded-lg hover:bg-[#103825] transition cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="bg-white p-3 rounded-2xl shadow-inner">
+                <QRCode
+                  value={resolvedAddress}
+                  size={180}
+                  level="M"
+                />
+              </div>
+
+              <span className="text-xs font-mono text-center text-white break-all select-all bg-[#041A10] p-2.5 rounded-xl border border-[#1A4B36] w-full">
+                {resolvedAddress}
               </span>
+
+              {qrModalOrder.payment_method === 'btc' && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 text-[11px] text-amber-200 flex items-start gap-2 text-left w-full">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-amber-300 block">Binance Deposit Notice:</span>
+                    Binance supports deposits from all BTC addresses (starting with "1", "3", "bc1p" and "bc1q").
+                  </div>
+                </div>
+              )}
+
               <button
                 type="button"
-                onClick={() => setQrModalOrder(null)}
-                className="text-[#D5EFE3]/60 hover:text-white p-1 rounded-lg hover:bg-[#103825] transition cursor-pointer"
+                onClick={() => {
+                  if (resolvedAddress) {
+                    navigator.clipboard.writeText(resolvedAddress);
+                    setCopiedKey('qr-modal');
+                    setTimeout(() => setCopiedKey(null), 2000);
+                  }
+                }}
+                className="w-full py-2.5 bg-[#FF5C00] hover:bg-[#FF731E] text-white rounded-xl text-xs font-bold font-sans transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <X className="h-4 w-4" />
+                {copiedKey === 'qr-modal' ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    <span>Address Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    <span>Copy Address</span>
+                  </>
+                )}
               </button>
             </div>
-
-            <div className="bg-white p-3 rounded-2xl shadow-inner">
-              <QRCode
-                value={qrModalOrder.deposit_address || ''}
-                size={180}
-                level="M"
-              />
-            </div>
-
-            <span className="text-xs font-mono text-center text-white break-all select-all bg-[#041A10] p-2.5 rounded-xl border border-[#1A4B36] w-full">
-              {qrModalOrder.deposit_address}
-            </span>
-
-            {qrModalOrder.payment_method === 'btc' && (
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 text-[11px] text-amber-200 flex items-start gap-2 text-left w-full">
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-amber-300 block">Binance Deposit Notice:</span>
-                  Binance supports deposits from all BTC addresses (starting with "1", "3", "bc1p" and "bc1q").
-                </div>
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                if (qrModalOrder.deposit_address) {
-                  navigator.clipboard.writeText(qrModalOrder.deposit_address);
-                  setCopiedKey('qr-modal');
-                  setTimeout(() => setCopiedKey(null), 2000);
-                }
-              }}
-              className="w-full py-2.5 bg-[#FF5C00] hover:bg-[#FF731E] text-white rounded-xl text-xs font-bold font-sans transition flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              {copiedKey === 'qr-modal' ? (
-                <>
-                  <Check className="h-3.5 w-3.5" />
-                  <span>Address Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" />
-                  <span>Copy Address</span>
-                </>
-              )}
-            </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
     </div>
   );

@@ -18,7 +18,8 @@ import {
 } from 'lucide-react';
 import { PortalStore, PortalSettings } from '../utils/portalStore';
 import { User, Order, TokenPackage, PaymentMethod } from '../types';
-import { isValidTxHash } from '../utils/cryptoVerifier';
+import { isValidTxHash, DEFAULT_BTC_DEPOSIT_ADDRESS, DEFAULT_LTC_DEPOSIT_ADDRESS } from '../utils/cryptoVerifier';
+import { DEFAULT_TRON_DEPOSIT_ADDRESS } from '../utils/tronVerifier';
 import { getCryptoRates, calculateCryptoAmount, formatCryptoAmount, CryptoRates } from '../utils/cryptoPrices';
 
 interface Trc20CheckoutProps {
@@ -37,6 +38,7 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
   initialPackage
 }) => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('usdt_trc20');
+  const [qrMode, setQrMode] = useState<'address' | 'uri'>('address');
   const [cryptoRates, setCryptoRates] = useState<CryptoRates>({
     BTC: 82500,
     LTC: 62.5,
@@ -133,17 +135,21 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
   const currency: 'USDT' | 'BTC' | 'LTC' = paymentMethod === 'btc' ? 'BTC' : paymentMethod === 'ltc' ? 'LTC' : 'USDT';
   const cryptoAmount = calculateCryptoAmount(selectedPkg?.usdt || 20, currency, cryptoRates);
 
-  const depositAddress = paymentMethod === 'btc'
-    ? portalSettings.btcDepositAddress
+  const depositAddress = (paymentMethod === 'btc'
+    ? (portalSettings.btcDepositAddress || DEFAULT_BTC_DEPOSIT_ADDRESS)
     : paymentMethod === 'ltc'
-    ? portalSettings.ltcDepositAddress
-    : portalSettings.depositAddress;
+    ? (portalSettings.ltcDepositAddress || DEFAULT_LTC_DEPOSIT_ADDRESS)
+    : (portalSettings.depositAddress || DEFAULT_TRON_DEPOSIT_ADDRESS)
+  ).trim();
 
-  const qrValue = paymentMethod === 'btc'
-    ? `bitcoin:${depositAddress}?amount=${cryptoAmount}`
-    : paymentMethod === 'ltc'
-    ? `litecoin:${depositAddress}?amount=${cryptoAmount}`
-    : depositAddress;
+  // Exchange QR codes (e.g. Binance) require the plain address string. BIP-21 URI is optional.
+  const qrValue = qrMode === 'address'
+    ? depositAddress
+    : (paymentMethod === 'btc'
+      ? `bitcoin:${depositAddress}?amount=${cryptoAmount}`
+      : paymentMethod === 'ltc'
+      ? `litecoin:${depositAddress}?amount=${cryptoAmount}`
+      : depositAddress);
 
   // Sync active order when modal opens or package/method changes
   useEffect(() => {
@@ -513,13 +519,43 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
 
                   <div className="flex flex-col sm:flex-row items-center gap-5">
                     {/* QR Code Container */}
-                    <div className="bg-white p-3 rounded-xl shrink-0 shadow-md">
-                      <QRCode
-                        value={qrValue}
-                        size={125}
-                        style={{ height: "auto", maxWidth: "100%", width: "125px" }}
-                        viewBox={`0 0 125 125`}
-                      />
+                    <div className="flex flex-col items-center gap-1.5 shrink-0">
+                      <div className="bg-white p-3 rounded-xl shadow-md">
+                        <QRCode
+                          value={qrValue}
+                          size={125}
+                          style={{ height: "auto", maxWidth: "100%", width: "125px" }}
+                          viewBox={`0 0 125 125`}
+                        />
+                      </div>
+                      {(paymentMethod === 'btc' || paymentMethod === 'ltc') && (
+                        <div className="flex items-center gap-1 bg-[#03130C] p-1 rounded-lg border border-[#1A4B36]/60 text-[10px]">
+                          <button
+                            type="button"
+                            onClick={() => setQrMode('address')}
+                            className={`px-2 py-0.5 rounded transition font-mono ${
+                              qrMode === 'address'
+                                ? 'bg-[#FF5C00] text-white font-bold'
+                                : 'text-[#D5EFE3]/60 hover:text-white'
+                            }`}
+                            title="Binance and exchange-compatible raw address QR"
+                          >
+                            Binance Scan
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setQrMode('uri')}
+                            className={`px-2 py-0.5 rounded transition font-mono ${
+                              qrMode === 'uri'
+                                ? 'bg-[#FF5C00] text-white font-bold'
+                                : 'text-[#D5EFE3]/60 hover:text-white'
+                            }`}
+                            title="BIP-21 URI with amount pre-filled"
+                          >
+                            BIP-21 URI
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex-1 w-full space-y-3">
