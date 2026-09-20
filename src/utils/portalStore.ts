@@ -233,13 +233,48 @@ export const PortalStore = {
     return DEFAULT_PACKAGES;
   },
 
-  async syncPackagesToSupabase(): Promise<boolean> {
+  async syncPackagesToSupabase(): Promise<{ success: boolean; message: string }> {
     const pkgs = this.getPackages();
     this.savePackages(pkgs);
-    if (isSupabaseConfigured()) {
-      return await SupabaseService.upsertPackages(pkgs);
+    if (!isSupabaseConfigured()) {
+      return {
+        success: false,
+        message: 'Supabase database credentials are not configured. Packages are saved locally only.'
+      };
     }
-    return true;
+    const success = await SupabaseService.upsertPackages(pkgs);
+    if (!success) {
+      return {
+        success: false,
+        message: 'Failed to write packages to Supabase database. Please verify table permissions or run the RLS bypass migration.'
+      };
+    }
+    return {
+      success: true,
+      message: 'Packages successfully saved to Supabase database and live for all customers!'
+    };
+  },
+
+  async syncPackagesFromSupabase(): Promise<TokenPackage[]> {
+    if (!isSupabaseConfigured()) {
+      return this.getPackages();
+    }
+    try {
+      const remotePackages = await SupabaseService.fetchPackages();
+      if (remotePackages && remotePackages.length > 0) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(PACKAGES_KEY, JSON.stringify(remotePackages));
+          localStorage.setItem(PACKAGES_VERSION_KEY, 'v3_20_50_200_100');
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('bryt_portal_packages_changed', { detail: remotePackages }));
+        }
+        return remotePackages;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch packages from remote database:', err);
+    }
+    return this.getPackages();
   },
 
   cleanupInactiveUsers(daysThreshold: number = 30): { deletedCount: number; deletedUserIds: string[] } {
@@ -795,6 +830,7 @@ export const PortalStore = {
 
       if (remotePackages && remotePackages.length > 0) {
         localStorage.setItem(PACKAGES_KEY, JSON.stringify(remotePackages));
+        localStorage.setItem(PACKAGES_VERSION_KEY, 'v3_20_50_200_100');
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('bryt_portal_packages_changed', { detail: remotePackages }));
         }

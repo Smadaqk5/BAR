@@ -58,6 +58,7 @@ import { AdminOrders } from './components/AdminOrders';
 import { PendingTransactions } from './components/PendingTransactions';
 import { SupportModal } from './components/SupportModal';
 import { PortalStore } from './utils/portalStore';
+import { subscribeToRemotePackageChanges } from './utils/supabase';
 import { Coins, LogOut, ShieldAlert, PlusCircle, Clock, Radio, Headphones } from 'lucide-react';
 import { 
   generateSyntheticRecord, 
@@ -133,6 +134,23 @@ export default function App() {
         setCurrentUser(refreshed);
       }
     });
+
+    // Real-time subscription to packages table
+    const unsubscribe = subscribeToRemotePackageChanges((remotePackages) => {
+      if (remotePackages && remotePackages.length > 0) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('bryt_portal_packages', JSON.stringify(remotePackages));
+          localStorage.setItem('bryt_portal_packages_version', 'v3_20_50_200_100');
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('bryt_portal_packages_changed', { detail: remotePackages }));
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // Track active pending deposits for current user

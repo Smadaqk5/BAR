@@ -106,6 +106,16 @@ export const Trc20Checkout: React.FC<Trc20CheckoutProps> = ({
 
     refreshPackages();
 
+    // When modal opens, sync latest packages directly from Supabase DB
+    if (isOpen) {
+      PortalStore.syncPackagesFromSupabase().then(fresh => {
+        if (fresh && fresh.length > 0) {
+          const validList = fresh.filter(p => p.enabled !== false);
+          setPackages(validList.length > 0 ? validList : fresh);
+        }
+      });
+    }
+
     const handlePackageUpdate = (e: any) => {
       if (e?.detail && Array.isArray(e.detail)) {
         const validList = e.detail.filter((p: TokenPackage) => p.enabled !== false);

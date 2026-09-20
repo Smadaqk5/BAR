@@ -124,7 +124,7 @@ export const AdminPackagePricingManager: React.FC<AdminPackagePricingManagerProp
         enabled: newTierEnabled
       });
 
-      await PortalStore.syncPackagesToSupabase();
+      const syncResult = await PortalStore.syncPackagesToSupabase();
       setPackages(PortalStore.getPackages());
 
       // Reset form
@@ -136,10 +136,14 @@ export const AdminPackagePricingManager: React.FC<AdminPackagePricingManagerProp
       setNewTierDescription('');
       setNewTierEnabled(true);
 
-      showToast(`✅ Created tier "${cleanLabel}" (${tokensVal} barcodes / $${usdtVal} USDT) & synced to checkout modal!`);
+      if (syncResult.success) {
+        showToast(`✅ Created tier "${cleanLabel}" & saved to Supabase DB for all customers!`);
+      } else {
+        showToast(`⚠️ Created tier "${cleanLabel}" locally. ${syncResult.message}`);
+      }
     } catch (err) {
       console.error('Failed to create package tier:', err);
-      showToast(`✅ Created tier "${cleanLabel}" & synced to checkout!`);
+      showToast(`⚠️ Error creating tier: ${err}`);
     } finally {
       setIsSubmittingNewTier(false);
     }
@@ -157,35 +161,41 @@ export const AdminPackagePricingManager: React.FC<AdminPackagePricingManagerProp
         tokens: finalTokens,
         usdt: finalUsdt
       });
-      await PortalStore.syncPackagesToSupabase();
+      const syncResult = await PortalStore.syncPackagesToSupabase();
       setPackages(PortalStore.getPackages());
-      showToast(`✅ Updated rate: ${finalTokens} barcodes for $${finalUsdt} USDT (synced to client checkout)!`);
+      if (syncResult.success) {
+        showToast(`✅ Updated rate: ${finalTokens} barcodes for $${finalUsdt} USDT & saved to DB!`);
+      } else {
+        showToast(`⚠️ Rate saved locally. ${syncResult.message}`);
+      }
     } catch (err) {
       console.error('Failed to update inline rate:', err);
-      showToast('✅ Saved rate to local catalog & checkout modal.');
+      showToast('⚠️ Failed to save rate to database.');
     } finally {
       setSavingRateId(null);
     }
   };
 
   // Toggle enabled/disabled in checkout
-  const handleTogglePackageEnabled = (pkg: TokenPackage) => {
+  const handleTogglePackageEnabled = async (pkg: TokenPackage) => {
     const nextState = pkg.enabled === false ? true : false;
     PortalStore.updatePackage(pkg.id, { enabled: nextState });
     setPackages(PortalStore.getPackages());
-    showToast(`${nextState ? 'Enabled' : 'Disabled'} "${pkg.label}" in client checkout.`);
+    const syncResult = await PortalStore.syncPackagesToSupabase();
+    showToast(`${nextState ? 'Enabled' : 'Disabled'} "${pkg.label}". ${syncResult.success ? 'Synced to DB.' : syncResult.message}`);
   };
 
   // Toggle popular tag
-  const handleTogglePopular = (pkg: TokenPackage) => {
+  const handleTogglePopular = async (pkg: TokenPackage) => {
     const nextPopular = !pkg.popular;
     PortalStore.updatePackage(pkg.id, { popular: nextPopular });
     setPackages(PortalStore.getPackages());
-    showToast(nextPopular ? `Marked "${pkg.label}" as POPULAR` : `Removed popular badge from "${pkg.label}"`);
+    const syncResult = await PortalStore.syncPackagesToSupabase();
+    showToast(`${nextPopular ? 'Marked as POPULAR' : 'Removed popular badge'}. ${syncResult.success ? 'Synced to DB.' : syncResult.message}`);
   };
 
   // Delete package tier
-  const handleDeletePackage = (pkgId: string, label: string) => {
+  const handleDeletePackage = async (pkgId: string, label: string) => {
     if (packages.length <= 1) {
       alert('You must maintain at least one active barcode package.');
       return;
@@ -193,7 +203,8 @@ export const AdminPackagePricingManager: React.FC<AdminPackagePricingManagerProp
     if (confirm(`Are you sure you want to delete the package tier "${label}"?`)) {
       PortalStore.deletePackage(pkgId);
       setPackages(PortalStore.getPackages());
-      showToast(`Deleted package tier "${label}".`);
+      const syncResult = await PortalStore.syncPackagesToSupabase();
+      showToast(`Deleted "${label}". ${syncResult.success ? 'Removed from DB.' : syncResult.message}`);
     }
   };
 
@@ -201,23 +212,28 @@ export const AdminPackagePricingManager: React.FC<AdminPackagePricingManagerProp
   const handleSyncAll = async () => {
     setIsSyncing(true);
     try {
-      await PortalStore.syncPackagesToSupabase();
+      const syncResult = await PortalStore.syncPackagesToSupabase();
       setPackages(PortalStore.getPackages());
-      showToast('✅ All packages and rates synced to Client Checkout Modal!');
+      if (syncResult.success) {
+        showToast('✅ All packages & rates saved to Supabase DB and live for all customers!');
+      } else {
+        showToast(`⚠️ Sync notice: ${syncResult.message}`);
+      }
     } catch (err) {
       console.warn(err);
-      showToast('✅ Packages synced locally & broadcasted!');
+      showToast('⚠️ Error syncing packages to database.');
     } finally {
       setIsSyncing(false);
     }
   };
 
   // Reset to default packages
-  const handleResetDefaults = () => {
+  const handleResetDefaults = async () => {
     if (confirm('Reset all packages to the official default catalog?')) {
       const reset = PortalStore.resetDefaultPackages();
       setPackages(reset);
-      showToast('Reset to default barcode packages.');
+      const syncResult = await PortalStore.syncPackagesToSupabase();
+      showToast(`Reset to default barcode packages. ${syncResult.success ? 'Synced to DB.' : syncResult.message}`);
     }
   };
 

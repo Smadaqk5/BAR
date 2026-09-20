@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Search,
   Check,
+  Copy,
   Database,
   PackagePlus,
   Package,
@@ -41,7 +42,13 @@ import {
   SlidersHorizontal
 } from 'lucide-react';
 import { PortalStore, PortalSettings } from '../utils/portalStore';
-import { isSupabaseConfigured } from '../utils/supabase';
+import { 
+  isSupabaseConfigured, 
+  getSupabaseConfig, 
+  saveCustomSupabaseConfig, 
+  SUPABASE_SQL_SCHEMA, 
+  SupabaseService 
+} from '../utils/supabase';
 import { User, Order, OrderStatus, TokenPackage, PaymentMethod } from '../types';
 import { AdminPackagePricingManager } from './AdminPackagePricingManager';
 
@@ -98,6 +105,14 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
   const [pkgDescription, setPkgDescription] = useState('');
   const [pkgEnabled, setPkgEnabled] = useState(true);
 
+  // Supabase Database Connection & Migration Modal State
+  const [isDbModalOpen, setIsDbModalOpen] = useState(false);
+  const [dbUrlInput, setDbUrlInput] = useState(() => getSupabaseConfig().url);
+  const [dbKeyInput, setDbKeyInput] = useState(() => getSupabaseConfig().anonKey);
+  const [isTestingDb, setIsTestingDb] = useState(false);
+  const [dbTestResult, setDbTestResult] = useState<{ status: 'idle' | 'success' | 'error'; message: string }>({ status: 'idle', message: '' });
+  const [copiedSql, setCopiedSql] = useState(false);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -129,6 +144,53 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
     }
     setIsSyncing(false);
     showToast(isSupabaseConfigured() ? 'Cloud database refreshed!' : 'Local data refreshed');
+  };
+
+  const handleSaveDbConfig = async () => {
+    saveCustomSupabaseConfig(dbUrlInput, dbKeyInput);
+    setIsTestingDb(true);
+    setDbTestResult({ status: 'idle', message: '' });
+    try {
+      if (dbUrlInput.trim() && dbKeyInput.trim()) {
+        const syncResult = await PortalStore.syncPackagesToSupabase();
+        if (syncResult.success) {
+          setDbTestResult({
+            status: 'success',
+            message: 'Successfully connected to Supabase! Packages table verified & active.'
+          });
+          showToast('✅ Supabase connected & packages synced to database!');
+        } else {
+          setDbTestResult({
+            status: 'error',
+            message: syncResult.message
+          });
+          showToast('⚠️ Connected, but table write failed. Check RLS policies in SQL script.');
+        }
+      } else {
+        setDbTestResult({
+          status: 'idle',
+          message: 'Saved in Local Storage mode (no remote database configured).'
+        });
+        showToast('Running in local storage mode.');
+      }
+      await refreshData();
+    } catch (err: any) {
+      setDbTestResult({
+        status: 'error',
+        message: err?.message || 'Failed to connect to database.'
+      });
+    } finally {
+      setIsTestingDb(false);
+    }
+  };
+
+  const handleCopyMigrationSql = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
+    }
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 2500);
+    showToast('📋 Copied full SQL Migration Script to clipboard!');
   };
 
   const handleForceApprove = (orderId: string) => {
@@ -210,12 +272,16 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
   const handleSaveAndSyncAllPackages = async () => {
     setIsSyncingPackages(true);
     try {
-      await PortalStore.syncPackagesToSupabase();
+      const res = await PortalStore.syncPackagesToSupabase();
       setPackages(PortalStore.getPackages());
-      showToast('✅ All packages saved & synced to Customer Portal!');
+      if (res.success) {
+        showToast('✅ All packages saved to Supabase DB & synced for all customers!');
+      } else {
+        showToast(`⚠️ Saved locally: ${res.message}`);
+      }
     } catch (err) {
       console.warn('Sync packages warning:', err);
-      showToast('✅ Saved locally & broadcast to Customer Portal!');
+      showToast('⚠️ Sync error occurred. Check browser console.');
     } finally {
       setIsSyncingPackages(false);
     }
@@ -256,21 +322,25 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
         });
       }
 
-      await PortalStore.syncPackagesToSupabase();
+      const syncResult = await PortalStore.syncPackagesToSupabase();
       setPackages(PortalStore.getPackages());
       setIsPackageModalOpen(false);
-      showToast(`✅ Saved "${cleanLabel}" & synced to Customer Portal!`);
+      if (syncResult.success) {
+        showToast(`✅ Saved "${cleanLabel}" & written to Supabase DB for all customers!`);
+      } else {
+        showToast(`⚠️ Saved "${cleanLabel}" locally. ${syncResult.message}`);
+      }
     } catch (err) {
       console.warn('Save package sync warning:', err);
       setPackages(PortalStore.getPackages());
       setIsPackageModalOpen(false);
-      showToast(`✅ Saved "${cleanLabel}" to Customer Portal`);
+      showToast(`⚠️ Error saving package: ${err}`);
     } finally {
       setIsSavingPackageModal(false);
     }
   };
 
-  const handleDeletePackage = (pkgId: string, label: string) => {
+  const handleDeletePackage = async (pkgId: string, label: string) => {
     if (packages.length <= 1) {
       alert('You must have at least one active package.');
       return;
@@ -278,29 +348,33 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
     if (confirm(`Are you sure you want to delete the package "${label}"?`)) {
       PortalStore.deletePackage(pkgId);
       setPackages(PortalStore.getPackages());
-      showToast(`Deleted package "${label}"`);
+      const res = await PortalStore.syncPackagesToSupabase();
+      showToast(`Deleted "${label}". ${res.success ? 'Removed from DB.' : res.message}`);
     }
   };
 
-  const handleTogglePackageEnabled = (pkg: TokenPackage) => {
+  const handleTogglePackageEnabled = async (pkg: TokenPackage) => {
     const nextState = pkg.enabled === false ? true : false;
     PortalStore.updatePackage(pkg.id, { enabled: nextState });
     setPackages(PortalStore.getPackages());
-    showToast(`${nextState ? 'Enabled' : 'Disabled'} package "${pkg.label}"`);
+    const res = await PortalStore.syncPackagesToSupabase();
+    showToast(`${nextState ? 'Enabled' : 'Disabled'} "${pkg.label}". ${res.success ? 'Synced to DB.' : res.message}`);
   };
 
-  const handleTogglePopular = (pkg: TokenPackage) => {
+  const handleTogglePopular = async (pkg: TokenPackage) => {
     const nextPopular = !pkg.popular;
     PortalStore.updatePackage(pkg.id, { popular: nextPopular });
     setPackages(PortalStore.getPackages());
-    showToast(nextPopular ? `Marked "${pkg.label}" as POPULAR` : `Removed popular badge from "${pkg.label}"`);
+    const res = await PortalStore.syncPackagesToSupabase();
+    showToast(`${nextPopular ? 'Marked as POPULAR' : 'Removed popular badge'}. ${res.success ? 'Synced to DB.' : res.message}`);
   };
 
-  const handleResetPackages = () => {
+  const handleResetPackages = async () => {
     if (confirm('Reset all barcode packages to official system defaults?')) {
       const reset = PortalStore.resetDefaultPackages();
       setPackages(reset);
-      showToast('Reset to default barcode packages.');
+      const res = await PortalStore.syncPackagesToSupabase();
+      showToast(`Reset packages to default. ${res.success ? 'Synced to DB.' : res.message}`);
     }
   };
 
@@ -533,13 +607,16 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
 
             {/* Cloud Sync Status Indicator & Trigger */}
             <div className="flex items-center gap-2">
-              <div 
-                className="px-2.5 py-1.5 bg-[#041A10] border border-[#1A4B36] rounded-xl flex items-center gap-1.5 text-[11px] font-mono text-[#D5EFE3]"
-                title={isSupabaseConfigured() ? 'Supabase environment variables detected & active' : 'Running on local browser storage'}
+              <button 
+                type="button"
+                onClick={() => setIsDbModalOpen(true)}
+                className="px-2.5 py-1.5 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] hover:border-emerald-500/50 rounded-xl flex items-center gap-1.5 text-[11px] font-mono text-[#D5EFE3] transition cursor-pointer"
+                title="Click to view or configure Supabase database connection & SQL migrations"
               >
-                <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+                <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
                 <span className="text-[#D5EFE3]/80">{isSupabaseConfigured() ? 'Cloud DB' : 'Local'}</span>
-              </div>
+                <span className="text-[10px] text-emerald-400/70 ml-0.5">⚙️</span>
+              </button>
 
               <button
                 onClick={refreshData}
@@ -590,18 +667,26 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
             </div>
           </div>
 
-          <div className="bg-[#082216] border border-[#1A4B36] rounded-2xl p-4 flex items-center justify-between shadow-sm">
+          <button
+            type="button"
+            onClick={() => setIsDbModalOpen(true)}
+            className="bg-[#082216] hover:bg-[#0c2e1f] border border-[#1A4B36] hover:border-emerald-500/50 rounded-2xl p-4 flex items-center justify-between shadow-sm transition text-left cursor-pointer group"
+            title="Click to configure Supabase URL, Anon Key, and SQL migrations"
+          >
             <div>
-              <span className="text-[11px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Database Status</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-mono text-[#D5EFE3]/60 uppercase font-bold">Database Status</span>
+                <span className="text-[10px] text-emerald-400 opacity-0 group-hover:opacity-100 transition">⚙️ Configure</span>
+              </div>
               <div className="text-xs font-bold text-white font-mono mt-1 flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                <span>{isSupabaseConfigured() ? 'Supabase Cloud' : 'Local Storage'}</span>
+                <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                <span>{isSupabaseConfigured() ? 'Supabase Cloud (Active)' : 'Local Storage Only'}</span>
               </div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition">
               <Database className="h-5 w-5" />
             </div>
-          </div>
+          </button>
         </div>
 
         {/* TAB 1: TRC-20 ORDERS & DEPOSITS */}
@@ -2148,6 +2233,166 @@ export const AdminOrders: React.FC<AdminOrdersProps> = ({ onBackToPortal, curren
               </div>
 
             </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* SUPABASE DATABASE & REAL-TIME SYNC MODAL */}
+      {isDbModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#082216] border border-[#1A4B36] rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 flex flex-col gap-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#1A4B36] pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                  <Database className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white font-sans flex items-center gap-2">
+                    <span>Supabase Database & Realtime Sync</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                      isSupabaseConfigured() 
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                        : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                    }`}>
+                      {isSupabaseConfigured() ? 'Cloud DB Active' : 'Local Storage Only'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-[#D5EFE3]/70 font-sans">
+                    Synchronize package tiers, deposit addresses, and customer balances across all clients
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsDbModalOpen(false)}
+                className="text-[#D5EFE3]/60 hover:text-white p-1 rounded-lg hover:bg-[#103825] transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Why Supabase Sync Note */}
+            <div className="bg-[#041A10] border border-[#1A4B36] rounded-2xl p-4 flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-[#FF5C00]">
+                <Sparkles className="h-4 w-4" />
+                <span>How Customer Package Sync Works</span>
+              </div>
+              <p className="text-xs text-[#D5EFE3]/80 leading-relaxed font-sans">
+                When Supabase is connected, any package you create, edit, or delete is automatically written to the <code className="text-emerald-400 font-mono bg-black/40 px-1 py-0.5 rounded">portal_packages</code> table and the <code className="text-emerald-400 font-mono bg-black/40 px-1 py-0.5 rounded">portal_settings</code> table. Real-time listeners broadcast new pricing to all active customer devices immediately without requiring a page refresh.
+              </p>
+            </div>
+
+            {/* Credentials Form */}
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="block text-[11px] font-mono font-bold text-[#D5EFE3]/70 uppercase mb-1">
+                  Supabase Project URL (e.g. https://yourproject.supabase.co)
+                </label>
+                <input
+                  type="text"
+                  value={dbUrlInput}
+                  onChange={e => setDbUrlInput(e.target.value)}
+                  placeholder="https://xxxxxxxxxxxx.supabase.co"
+                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-emerald-500 text-white rounded-xl px-4 py-2.5 text-xs font-mono outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono font-bold text-[#D5EFE3]/70 uppercase mb-1">
+                  Supabase Anon / Public Key (anonKey)
+                </label>
+                <input
+                  type="password"
+                  value={dbKeyInput}
+                  onChange={e => setDbKeyInput(e.target.value)}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  className="w-full bg-[#041A10] border border-[#1A4B36] focus:border-emerald-500 text-white rounded-xl px-4 py-2.5 text-xs font-mono outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Test Status Banner */}
+            {dbTestResult.message && (
+              <div className={`p-3.5 rounded-xl border text-xs font-sans flex items-start gap-2.5 ${
+                dbTestResult.status === 'success' 
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+                  : dbTestResult.status === 'error'
+                  ? 'bg-red-500/10 border-red-500/30 text-red-300'
+                  : 'bg-zinc-800/40 border-zinc-700 text-zinc-300'
+              }`}>
+                {dbTestResult.status === 'success' ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
+                )}
+                <div className="flex-1">
+                  <div className="font-bold">{dbTestResult.status === 'success' ? 'Connected Successfully' : 'Sync Issue Detected'}</div>
+                  <div className="mt-0.5 leading-relaxed">{dbTestResult.message}</div>
+                </div>
+              </div>
+            )}
+
+            {/* SQL Migration Script Copy Section */}
+            <div className="bg-[#041A10] border border-[#1A4B36] rounded-2xl p-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-white font-sans flex items-center gap-1.5">
+                    <span>Database Migration Script (With RLS Disabled)</span>
+                  </h4>
+                  <p className="text-[11px] text-[#D5EFE3]/60 font-sans mt-0.5">
+                    If Supabase blocks package writes, run this script in your Supabase SQL Editor to grant table permissions.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyMigrationSql}
+                  className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  {copiedSql ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  <span>{copiedSql ? 'Copied!' : 'Copy SQL'}</span>
+                </button>
+              </div>
+
+              <div className="bg-black/60 border border-[#1A4B36]/50 rounded-xl p-3 max-h-32 overflow-y-auto font-mono text-[11px] text-[#D5EFE3]/70 select-all">
+                <pre>{SUPABASE_SQL_SCHEMA}</pre>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="border-t border-[#1A4B36] pt-4 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleSaveAndSyncAllPackages}
+                disabled={isSyncingPackages}
+                className="px-3.5 py-2 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] rounded-xl text-xs font-bold font-sans transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 text-[#FF5C00] ${isSyncingPackages ? 'animate-spin' : ''}`} />
+                <span>{isSyncingPackages ? 'Syncing...' : 'Force Sync All Packages to DB'}</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDbModalOpen(false)}
+                  className="px-4 py-2 bg-[#041A10] hover:bg-[#103825] border border-[#1A4B36] text-[#D5EFE3] rounded-xl text-xs font-bold font-sans transition cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveDbConfig}
+                  disabled={isTestingDb}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold font-sans transition flex items-center gap-2 cursor-pointer shadow-md"
+                >
+                  <Save className={`h-4 w-4 ${isTestingDb ? 'animate-spin' : ''}`} />
+                  <span>{isTestingDb ? 'Connecting & Verifying...' : 'Save & Verify Database'}</span>
+                </button>
+              </div>
+            </div>
 
           </div>
         </div>

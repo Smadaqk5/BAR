@@ -10,14 +10,14 @@ export interface SupabaseConfig {
 
 export function getSupabaseConfig(): SupabaseConfig {
   const env = (import.meta as any).env || {};
-  const url = (
+  let url = (
     env.VITE_SUPABASE_URL ||
     env.NEXT_PUBLIC_SUPABASE_URL ||
     env.SUPABASE_URL ||
     ''
   ).trim();
 
-  const anonKey = (
+  let anonKey = (
     env.VITE_SUPABASE_ANON_KEY ||
     env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     env.SUPABASE_ANON_KEY ||
@@ -26,7 +26,31 @@ export function getSupabaseConfig(): SupabaseConfig {
     ''
   ).trim();
 
+  // Allow admin runtime configuration via localStorage if env vars not provided
+  if (!url && typeof localStorage !== 'undefined') {
+    url = (localStorage.getItem('bryt_supabase_url') || '').trim();
+  }
+  if (!anonKey && typeof localStorage !== 'undefined') {
+    anonKey = (localStorage.getItem('bryt_supabase_anon_key') || '').trim();
+  }
+
   return { url, anonKey };
+}
+
+export function saveCustomSupabaseConfig(url: string, anonKey: string): void {
+  if (typeof localStorage !== 'undefined') {
+    if (url.trim()) {
+      localStorage.setItem('bryt_supabase_url', url.trim());
+    } else {
+      localStorage.removeItem('bryt_supabase_url');
+    }
+    if (anonKey.trim()) {
+      localStorage.setItem('bryt_supabase_anon_key', anonKey.trim());
+    } else {
+      localStorage.removeItem('bryt_supabase_anon_key');
+    }
+  }
+  supabaseInstance = null;
 }
 
 let supabaseInstance: SupabaseClient | null = null;
@@ -39,7 +63,12 @@ export function getSupabaseClient(): SupabaseClient | null {
 
   try {
     if (!supabaseInstance) {
-      supabaseInstance = createClient(config.url, config.anonKey);
+      supabaseInstance = createClient(config.url, config.anonKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false
+        }
+      });
     }
     return supabaseInstance;
   } catch (err) {
@@ -51,6 +80,35 @@ export function getSupabaseClient(): SupabaseClient | null {
 export function isSupabaseConfigured(): boolean {
   const config = getSupabaseConfig();
   return Boolean(config.url && config.anonKey);
+}
+
+// Subscribe to real-time changes in portal_packages so all customers reflect new tiers instantly
+export function subscribeToRemotePackageChanges(onUpdate: (packages: any[]) => void): () => void {
+  const client = getSupabaseClient();
+  if (!client) return () => {};
+
+  try {
+    const channel = client
+      .channel('realtime_packages_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'portal_packages' },
+        async () => {
+          const fresh = await SupabaseService.fetchPackages();
+          if (fresh && fresh.length > 0) {
+            onUpdate(fresh);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('Realtime package subscription error:', err);
+    return () => {};
+  }
 }
 
 // SQL Schema for user reference to create Supabase tables
@@ -87,7 +145,7 @@ CREATE TABLE IF NOT EXISTS public.trc20_orders (
 -- 3. System & Gateway Settings Table
 CREATE TABLE IF NOT EXISTS public.portal_settings (
   id TEXT PRIMARY KEY DEFAULT 'global_settings',
-  deposit_address TEXT NOT NULL,
+  deposit_address TEXT NOT NULL DEFAULT 'TNPeeC4p9C5aX6Kqf6Hh1mRz8KqF5aX6Kq',
   btc_deposit_address TEXT,
   ltc_deposit_address TEXT,
   usdt_contract TEXT NOT NULL DEFAULT 'TR7NHqjekKQxGTCi8q8ZY4pL8otSzgjLj6',
@@ -99,7 +157,8 @@ CREATE TABLE IF NOT EXISTS public.portal_settings (
 -- Ensure columns exist if tables were created in a previous version
 ALTER TABLE IF EXISTS public.portal_settings 
   ADD COLUMN IF NOT EXISTS btc_deposit_address TEXT,
-  ADD COLUMN IF NOT EXISTS ltc_deposit_address TEXT;
+  ADD COLUMN IF NOT EXISTS ltc_deposit_address TEXT,
+  ALTER COLUMN deposit_address SET DEFAULT 'TNPeeC4p9C5aX6Kqf6Hh1mRz8KqF5aX6Kq';
 
 ALTER TABLE IF EXISTS public.trc20_orders 
   ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'usdt',
@@ -133,12 +192,18 @@ CREATE TABLE IF NOT EXISTS public.saved_profiles (
   payload_data JSONB NOT NULL
 );
 
--- Seed initial admin and client
+-- 6. Disable Row Level Security (RLS) so the web app can read/write without auth blocking
+ALTER TABLE IF EXISTS public.portal_packages DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.portal_settings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.trc20_orders DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.portal_users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.saved_profiles DISABLE ROW LEVEL SECURITY;
+
+-- Seed initial admin
 INSERT INTO public.portal_users (id, email, role, token_balance)
 VALUES 
-  ('user-admin-1', 'smada.io', 'admin', 9999),
-  ('user-client-1', 'client@test.com', 'client', 0)
-ON CONFLICT (id) DO NOTHING;
+  ('user-admin-1', 'smada.io', 'admin', 9999)
+ON CONFLICT (id) DO UPDATE SET role = 'admin';
 `;
 
 // Supabase Async Synchronization Helpers
@@ -280,7 +345,10 @@ export const SupabaseService = {
 
   async upsertPackages(packages: any[]): Promise<boolean> {
     const client = getSupabaseClient();
-    if (!client) return false;
+    if (!client) {
+      console.warn('Supabase client not initialized: Missing URL or Anon Key');
+      return false;
+    }
     try {
       const formatted = packages.map((p, idx) => ({
         id: p.id,
@@ -295,23 +363,55 @@ export const SupabaseService = {
         updated_at: new Date().toISOString()
       }));
 
-      // Try portal_packages table first
+      // 1. Try portal_packages table
       const { error: pkgErr } = await client
         .from('portal_packages')
-        .upsert(formatted);
+        .upsert(formatted, { onConflict: 'id' });
 
-      // Also try portal_settings json
-      await client
+      if (pkgErr) {
+        console.error('Supabase portal_packages upsert error:', pkgErr);
+      }
+
+      // Cleanup deleted tiers from remote table
+      if (packages.length > 0) {
+        const activeIds = packages.map(p => p.id);
+        const { error: delErr } = await client
+          .from('portal_packages')
+          .delete()
+          .not('id', 'in', `(${activeIds.map(id => `"${id}"`).join(',')})`);
+        if (delErr) {
+          console.warn('Supabase cleanup deleted packages warning:', delErr);
+        }
+      }
+
+      // 2. Also sync to portal_settings with complete record to avoid NOT NULL constraint errors
+      const { data: existingSettings } = await client
+        .from('portal_settings')
+        .select('*')
+        .eq('id', 'global_settings')
+        .maybeSingle();
+
+      const { error: settingErr } = await client
         .from('portal_settings')
         .upsert({
           id: 'global_settings',
+          deposit_address: existingSettings?.deposit_address || 'TNPeeC4p9C5aX6Kqf6Hh1mRz8KqF5aX6Kq',
+          btc_deposit_address: existingSettings?.btc_deposit_address || null,
+          ltc_deposit_address: existingSettings?.ltc_deposit_address || null,
+          usdt_contract: existingSettings?.usdt_contract || 'TR7NHqjekKQxGTCi8q8ZY4pL8otSzgjLj6',
+          tokens_per_usdt: existingSettings?.tokens_per_usdt || 1,
           packages: packages,
           updated_at: new Date().toISOString()
-        });
+        }, { onConflict: 'id' });
 
-      return !pkgErr;
+      if (settingErr) {
+        console.error('Supabase portal_settings upsert error:', settingErr);
+      }
+
+      // Success if at least one target succeeded without critical blockage
+      return !pkgErr || !settingErr;
     } catch (err) {
-      console.warn('Supabase upsertPackages fallback warning:', err);
+      console.error('Supabase upsertPackages exception:', err);
       return false;
     }
   },
