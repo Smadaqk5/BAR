@@ -32,7 +32,9 @@ import {
   RotateCcw,
   SlidersHorizontal,
   FolderDown,
-  ArrowRight
+  ArrowRight,
+  Award,
+  Heart
 } from 'lucide-react';
 import { AAMVAData, FieldHelp, User as UserType, SavedClientProfile } from './types';
 import { 
@@ -44,6 +46,8 @@ import {
   TRUNCATION_OPTIONS, 
   GENDER_OPTIONS, 
   RACE_OPTIONS, 
+  VETERAN_OPTIONS,
+  ORGAN_DONOR_OPTIONS,
   DEFAULT_ALASKA_DEMO, 
   EMPTY_FORM, 
   HELP_HINTS,
@@ -936,6 +940,7 @@ export default function App() {
               onChange={val => handleInputChange('ver', val)}
               onFocus={() => handleFocus('ver')}
             >
+              <option value="11">v11 (Modern Special Indicators Standard)</option>
               <option value="10">v10 (AAMVA Standard)</option>
               <option value="09">v09 (Rodgers Standard)</option>
               <option value="08">v08 (Classic Standard)</option>
@@ -1424,6 +1429,122 @@ export default function App() {
               ))}
             </SelectInput>
           </FormSection>
+
+          {/* Section 7 - AAMVA SPECIAL INDICATORS (v11 Set) */}
+          <FormSection 
+            title="7. AAMVA SPECIAL INDICATORS (v11 Set)" 
+            icon={<Award className="h-4 w-4 text-[#FF5C00]" />} 
+            subtitle="Standard indicators for Veteran and Organ Donor credentials"
+            action={
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleInputChange('ddl', '1');
+                    handleInputChange('ddk', '1');
+                    setToastMessage('🎖️ Enabled Veteran & Organ Donor indicators (DDL & DDK)!');
+                  }}
+                  className="px-2 py-0.5 bg-[#FF5C00]/10 hover:bg-[#FF5C00] text-[#FF5C00] hover:text-white border border-[#FF5C00]/30 hover:border-[#FF5C00] text-[10px] font-mono font-bold rounded transition cursor-pointer"
+                  title="Enable both Veteran and Organ Donor designations (Code 1)"
+                >
+                  + Enable Both
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleInputChange('ddl', '');
+                    handleInputChange('ddk', '');
+                    setToastMessage('Cleared special indicators (DDL & DDK)');
+                  }}
+                  className="px-2 py-0.5 bg-[#041A10] hover:bg-[#103825] text-[#D5EFE3]/70 hover:text-white text-[10px] font-mono rounded border border-[#1A4B36] transition cursor-pointer"
+                  title="Clear indicators"
+                >
+                  Clear
+                </button>
+              </div>
+            }
+          >
+            {/* Field 1: Veteran Indicator (DDL) */}
+            <div className="flex flex-col gap-1.5">
+              <SelectInput
+                label="Veteran Indicator"
+                tag="DDL"
+                value={formData.ddl || ''}
+                onChange={val => handleInputChange('ddl', val)}
+                onFocus={() => handleFocus('ddl')}
+                helperText="U.S. military veteran designation"
+              >
+                {VETERAN_OPTIONS.map(opt => (
+                  <option key={opt.code} value={opt.code}>{opt.name}</option>
+                ))}
+              </SelectInput>
+
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = formData.ddl === '1' ? '' : '1';
+                    handleInputChange('ddl', next);
+                    setToastMessage(next === '1' ? '🎖️ Veteran Designation (DDL: 1) Active' : 'Cleared Veteran designation');
+                  }}
+                  className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    formData.ddl === '1'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-white border border-[#0B2519]/20 text-[#0B2519]/70 hover:border-[#FF5C00]/50'
+                  }`}
+                >
+                  <Award className="h-3 w-3" />
+                  <span>{formData.ddl === '1' ? 'Veteran Active (DDL: 1)' : 'Toggle Veteran (1)'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Field 2: Organ Donor (DDK) */}
+            <div className="flex flex-col gap-1.5">
+              <SelectInput
+                label="Organ Donor"
+                tag="DDK"
+                value={formData.ddk || ''}
+                onChange={val => handleInputChange('ddk', val)}
+                onFocus={() => handleFocus('ddk')}
+                helperText="Registered organ donor"
+              >
+                {ORGAN_DONOR_OPTIONS.map(opt => (
+                  <option key={opt.code} value={opt.code}>{opt.name}</option>
+                ))}
+              </SelectInput>
+
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = formData.ddk === '1' ? '' : '1';
+                    handleInputChange('ddk', next);
+                    setToastMessage(next === '1' ? '❤️ Organ Donor (DDK: 1) Active' : 'Cleared Organ Donor designation');
+                  }}
+                  className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    formData.ddk === '1'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'bg-white border border-[#0B2519]/20 text-[#0B2519]/70 hover:border-[#FF5C00]/50'
+                  }`}
+                >
+                  <Heart className="h-3 w-3" />
+                  <span>{formData.ddk === '1' ? 'Donor Active (DDK: 1)' : 'Toggle Donor (1)'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Explanatory callout for v11 Set */}
+            <div className="col-span-1 md:col-span-2 xl:col-span-2 bg-[#041A10]/5 border border-[#0B2519]/15 rounded-xl p-3 flex flex-col justify-center gap-1">
+              <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-[#0B2519]">
+                <span className="text-[#FF5C00]">DDL · DDK</span>
+                <span>AAMVA Special Indicators (v11 Set)</span>
+              </div>
+              <p className="text-[10px] text-[#0B2519]/70 font-sans leading-relaxed">
+                Standard indicators for Veteran and Organ Donor credentials. When configured, subfile tags <strong className="font-mono text-emerald-800">DDL1</strong> (U.S. military veteran designation) and <strong className="font-mono text-rose-800">DDK1</strong> (Registered organ donor) are seamlessly integrated into the PDF417 payload.
+              </p>
+            </div>
+          </FormSection>
         </div>
 
         {/* RIGHT PANEL - Live Output dashboard */}
@@ -1620,6 +1741,22 @@ export default function App() {
                         <span className="text-[#0B2519]/60 font-medium font-sans">REAL ID Code</span>
                         <span className="text-[#061E13] font-extrabold font-mono">{formData.dda === 'F' ? 'REAL ID (F)' : 'Non-Compliant (N)'}</span>
                       </div>
+                      {formData.ddl && (
+                        <div className="flex justify-between py-1 border-b border-[#0B2519]/10">
+                          <span className="text-[#0B2519]/60 font-medium font-sans">Veteran (DDL)</span>
+                          <span className="text-emerald-700 font-extrabold font-mono">
+                            {formData.ddl === '1' ? 'Veteran (1)' : formData.ddl === '2' ? 'Non-Veteran (2)' : formData.ddl}
+                          </span>
+                        </div>
+                      )}
+                      {formData.ddk && (
+                        <div className="flex justify-between py-1 border-b border-[#0B2519]/10">
+                          <span className="text-[#0B2519]/60 font-medium font-sans">Organ Donor (DDK)</span>
+                          <span className="text-rose-700 font-extrabold font-mono">
+                            {formData.ddk === '1' ? 'Donor (1)' : formData.ddk === '2' ? 'Non-Donor (2)' : formData.ddk}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

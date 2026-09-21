@@ -1,6 +1,6 @@
 export interface AAMVAData {
   fileType: 'DL' | 'ID';
-  ver: '10' | '09' | '08' | '05';
+  ver: '11' | '10' | '09' | '08' | '05';
   iin: string;
   jvn: string;
   dcs: string;
@@ -31,6 +31,8 @@ export interface AAMVAData {
   dde: 'N' | 'T' | 'U';
   ddf: 'N' | 'T' | 'U';
   ddg: 'N' | 'T' | 'U';
+  ddl?: string; // DDL - Veteran Indicator: U.S. military veteran designation (e.g. '1' = Veteran)
+  ddk?: string; // DDK - Organ Donor: Registered organ donor (e.g. '1' = Registered Organ Donor)
 }
 
 export interface FieldHelp {

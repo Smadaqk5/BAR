@@ -588,7 +588,9 @@ export function generateSyntheticRecord(
     dcd: Math.random() > 0.2 ? 'NONE' : 'M',
     dde: 'N',
     ddf: 'N',
-    ddg: 'N'
+    ddg: 'N',
+    ddl: Math.random() > 0.85 ? '1' : '',
+    ddk: Math.random() > 0.4 ? '1' : ''
   };
 }
 
@@ -623,14 +625,14 @@ export function exportDatasetAsCSV(records: AAMVAData[]): string {
     'daj_state', 'daq_dln', 'dcs_last_name', 'dac_first_name', 'dad_middle_name',
     'dbb_dob', 'dbd_issue', 'dba_expiry', 'dbc_sex', 'dau_height', 'daw_weight',
     'day_eye', 'daz_hair', 'dag_street', 'dai_city', 'dak_zip', 'iin', 'dcf_discriminator',
-    'dcg_icn', 'dda_real_id', 'dca_class'
+    'dcg_icn', 'dda_real_id', 'dca_class', 'ddl_veteran', 'ddk_donor'
   ];
 
   const rows = records.map(r => [
     r.daj, r.daq, r.dcs, r.dac, r.dad || '',
     r.dbb, r.dbd, r.dba, r.dbc, r.dau, r.daw || '',
     r.day, r.daz || '', `"${r.dag}"`, r.dai, r.dak, r.iin,
-    r.dcf, r.dcg, r.dda, r.dca || ''
+    r.dcf, r.dcg, r.dda, r.dca || '', r.ddl || '', r.ddk || ''
   ]);
 
   return [headers.join(','), ...rows.map(row => row.join(','))].join('\n');

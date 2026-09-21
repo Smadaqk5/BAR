@@ -204,6 +204,18 @@ export const RACE_OPTIONS = [
   { code: 'O', name: 'Other (O)' }
 ];
 
+export const VETERAN_OPTIONS = [
+  { code: '', name: '-- Not Specified / None --' },
+  { code: '1', name: '1 - U.S. Military Veteran Designation' },
+  { code: '2', name: '2 - Non-Veteran' }
+];
+
+export const ORGAN_DONOR_OPTIONS = [
+  { code: '', name: '-- Not Specified / None --' },
+  { code: '1', name: '1 - Registered Organ Donor' },
+  { code: '2', name: '2 - Not an Organ Donor' }
+];
+
 export const DEFAULT_ALASKA_DEMO: AAMVAData = {
   fileType: 'DL',
   ver: '09',
@@ -236,7 +248,9 @@ export const DEFAULT_ALASKA_DEMO: AAMVAData = {
   dcd: '',
   dde: 'N',
   ddf: 'N',
-  ddg: 'N'
+  ddg: 'N',
+  ddl: '',
+  ddk: ''
 };
 
 export const EMPTY_FORM: AAMVAData = {
@@ -271,7 +285,9 @@ export const EMPTY_FORM: AAMVAData = {
   dcd: '',
   dde: 'N',
   ddf: 'N',
-  ddg: 'N'
+  ddg: 'N',
+  ddl: '',
+  ddk: ''
 };
 
 export const HELP_HINTS: Record<string, FieldHelp> = {
@@ -434,6 +450,16 @@ export const HELP_HINTS: Record<string, FieldHelp> = {
     fieldName: 'ddg',
     title: 'Middle Name Truncation (DDG)',
     hint: 'Indicates if middle name was cut off during layout. N = Not Truncated, T = Truncated.'
+  },
+  ddl: {
+    fieldName: 'ddl',
+    title: 'Veteran Indicator (DDL)',
+    hint: 'U.S. military veteran designation credential (v11 set). Standard code: 1 = Veteran, 2 = Non-veteran, or blank if unspecified.'
+  },
+  ddk: {
+    fieldName: 'ddk',
+    title: 'Organ Donor (DDK)',
+    hint: 'Registered organ donor designation (v11 set). Standard code: 1 = Registered organ donor, 2 = Not an organ donor, or blank if unspecified.'
   }
 };
 

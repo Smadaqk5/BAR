@@ -395,13 +395,14 @@ from typing import Any, Dict, List, Optional, Tuple
                         <th className="py-2.5 px-3 font-extrabold uppercase text-[10px]">Exp (DBA)</th>
                         <th className="py-2.5 px-3 font-extrabold uppercase text-[10px]">Address & City</th>
                         <th className="py-2.5 px-3 font-extrabold uppercase text-[10px]">REAL ID</th>
+                        <th className="py-2.5 px-3 font-extrabold uppercase text-[10px]">Indicators</th>
                         <th className="py-2.5 px-3 font-extrabold uppercase text-[10px] text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#0B2519]/10">
                       {filteredDataset.length === 0 ? (
                         <tr>
-                          <td colSpan={10} className="py-8 text-center text-[#0B2519]/50 font-sans text-xs">
+                          <td colSpan={11} className="py-8 text-center text-[#0B2519]/50 font-sans text-xs">
                             No synthetic records matched your search query.
                           </td>
                         </tr>
@@ -432,6 +433,23 @@ from typing import Any, Dict, List, Optional, Tuple
                                     Standard
                                   </span>
                                 )}
+                              </td>
+                              <td className="py-2 px-3">
+                                <div className="flex items-center gap-1">
+                                  {rec.ddl === '1' && (
+                                    <span className="bg-emerald-50 text-emerald-800 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border border-emerald-200" title="Veteran Indicator (DDL: 1)">
+                                      DDL
+                                    </span>
+                                  )}
+                                  {rec.ddk === '1' && (
+                                    <span className="bg-rose-50 text-rose-700 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border border-rose-200" title="Organ Donor (DDK: 1)">
+                                      DDK
+                                    </span>
+                                  )}
+                                  {!rec.ddl && !rec.ddk && (
+                                    <span className="text-[#0B2519]/30 text-[10px]">—</span>
+                                  )}
+                                </div>
                               </td>
                               <td className="py-2 px-3 text-right">
                                 <button

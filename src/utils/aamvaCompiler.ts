@@ -48,7 +48,9 @@ export function compileAAMVAString(data: AAMVAData): string {
     { tag: 'DCB', value: data.dcb },
     { tag: 'DCD', value: data.dcd },
     { tag: 'DAZ', value: data.daz },
-    { tag: 'DAW', value: data.daw }
+    { tag: 'DAW', value: data.daw },
+    { tag: 'DDL', value: data.ddl }, // Veteran Indicator
+    { tag: 'DDK', value: data.ddk }  // Organ Donor Indicator
   ];
 
   optionalFields.forEach(f => {
