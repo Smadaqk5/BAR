@@ -78,6 +78,7 @@ import {
 } from './utils/mockGenerator';
 
 type BarcodeBackgroundMode = 'transparent' | 'white';
+type BarcodeLayoutMode = 'default' | 'dense_wide';
 
 export default function App() {
   // Authentication & Session State
@@ -98,7 +99,7 @@ export default function App() {
   // Active help guide state (optional tracking)
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // Output State
+  // Output State & Barcode Geometry Design
   const [generatedString, setGeneratedString] = useState<string>('');
   const [previewImageUrl, setPreviewImageUrl] = useState<string>('');
   const [isCopied, setIsCopied] = useState<boolean>(false);
@@ -108,6 +109,11 @@ export default function App() {
   const [validationError, setValidationError] = useState<string>('');
   const [backgroundMode, setBackgroundMode] = useState<BarcodeBackgroundMode>('white');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Multi-Column & Layout Design Options (Default vs Multi-Column Dense Wide)
+  const [layoutMode, setLayoutMode] = useState<BarcodeLayoutMode>('default');
+  const [customColumns, setCustomColumns] = useState<number>(24);
+  const [showAdvancedColumns, setShowAdvancedColumns] = useState<boolean>(false);
 
   // User-scoped Saved Profiles & Generated Barcodes (Strictly private per account)
   const [savedProfiles, setSavedProfiles] = useState<SavedClientProfile[]>(() => 
@@ -228,11 +234,12 @@ export default function App() {
   const renderBarcode = (barcodeText: string, shouldOpenModal = false) => {
     if (!canvasRef.current) return;
 
+    const isDenseWide = layoutMode === 'dense_wide';
     const barcodeOptions: any = {
       bcid: 'pdf417',
       text: barcodeText,
       scale: 4,
-      height: 18,
+      height: isDenseWide ? 12 : 18,
       includetext: false,
       eclevel: 5,
       padding: 0,
@@ -243,6 +250,11 @@ export default function App() {
       paddingright: 0,
       paddingbottom: 0,
     };
+
+    if (isDenseWide) {
+      barcodeOptions.columns = customColumns;
+    }
+
     if (backgroundMode === 'white') {
       barcodeOptions.backgroundcolor = '#FFFFFF';
     }
@@ -279,7 +291,7 @@ export default function App() {
   useEffect(() => {
     if (!generatedString || !canvasRef.current) return;
     renderBarcode(generatedString);
-  }, [backgroundMode, generatedString]);
+  }, [backgroundMode, generatedString, layoutMode, customColumns]);
 
   // Handle changing numerical/raw DAU to backward sync slider values if needed
   const handleDauChange = (val: string) => {
@@ -1572,6 +1584,140 @@ export default function App() {
               )}
             </div>
 
+            {/* Barcode Layout Design Switch & Columns Configuration */}
+            <div className="flex flex-col gap-2.5 bg-white border border-[#0B2519]/15 rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-extrabold uppercase font-mono text-[#0B2519] flex items-center gap-1.5">
+                    <SlidersHorizontal className="h-3 w-3 text-[#FF5C00]" />
+                    Barcode Style Design
+                  </span>
+                  <p className="text-[9px] text-[#0B2519]/60 font-sans">
+                    Switch between Default aspect ratio and Multi-Column Dense Wide format
+                  </p>
+                </div>
+              </div>
+
+              {/* iOS-Style Pill Toggle Switch */}
+              <div className="flex items-center justify-between p-1.5 bg-[#FAF7EC] rounded-lg border border-[#0B2519]/15">
+                <span className="text-[10px] font-bold font-mono text-[#0B2519]/80 pl-1">
+                  {layoutMode === 'dense_wide' ? 'Multi-Column Wide (Card Format)' : 'Default Standard'}
+                </span>
+                
+                {/* Visual Toggle Switch Button */}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={layoutMode === 'dense_wide'}
+                  onClick={() => {
+                    const next = layoutMode === 'dense_wide' ? 'default' : 'dense_wide';
+                    setLayoutMode(next);
+                    setToastMessage(next === 'dense_wide' 
+                      ? '⚡ Switched to Multi-Column Dense Wide design (24 cols)' 
+                      : 'Switched to Standard Default barcode');
+                  }}
+                  className={`relative inline-flex h-6 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                    layoutMode === 'dense_wide' ? 'bg-[#FF5C00]' : 'bg-[#0B2519]/25'
+                  }`}
+                  title="Toggle between Default Standard and Multi-Column Wide format"
+                >
+                  <span className="sr-only">Toggle Barcode Design Layout</span>
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                      layoutMode === 'dense_wide' ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Quick Preset Selector Buttons */}
+              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLayoutMode('default');
+                    setToastMessage('Switched to Standard Default barcode');
+                  }}
+                  className={`py-1.5 px-2 rounded border text-[10px] font-mono font-bold transition flex items-center justify-center gap-1.5 ${
+                    layoutMode === 'default'
+                      ? 'bg-[#0B2519] text-white border-[#0B2519] shadow-xs'
+                      : 'bg-white text-[#0B2519]/70 border-[#0B2519]/20 hover:border-[#FF5C00]/50'
+                  }`}
+                >
+                  <span>Default (Auto)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLayoutMode('dense_wide');
+                    setToastMessage('Switched to Multi-Column Dense Wide design (24 cols)');
+                  }}
+                  className={`py-1.5 px-2 rounded border text-[10px] font-mono font-bold transition flex items-center justify-center gap-1.5 ${
+                    layoutMode === 'dense_wide'
+                      ? 'bg-[#FF5C00] text-white border-[#FF5C00] shadow-xs'
+                      : 'bg-white text-[#0B2519]/70 border-[#0B2519]/20 hover:border-[#FF5C00]/50'
+                  }`}
+                >
+                  <span>Multi-Column Wide</span>
+                </button>
+              </div>
+
+              {/* Additional Column Tuning Drawer for Dense Wide Mode */}
+              {layoutMode === 'dense_wide' && (
+                <div className="flex flex-col gap-2 pt-2 border-t border-[#0B2519]/10 mt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono font-bold text-[#0B2519]/80">
+                      Column Density: <strong className="text-[#FF5C00]">{customColumns} columns</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedColumns(!showAdvancedColumns)}
+                      className="text-[9px] text-[#FF5C00] hover:underline font-mono"
+                    >
+                      {showAdvancedColumns ? 'Hide Presets' : 'Preset Columns'}
+                    </button>
+                  </div>
+
+                  <input
+                    type="range"
+                    min="16"
+                    max="30"
+                    step="2"
+                    value={customColumns}
+                    onChange={e => setCustomColumns(parseInt(e.target.value, 10))}
+                    className="w-full accent-[#FF5C00] h-1.5 bg-[#0B2519]/10 rounded-lg cursor-pointer"
+                  />
+
+                  {/* Preset quick pills */}
+                  <div className="flex items-center justify-between gap-1">
+                    {[18, 20, 22, 24, 26, 28].map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => {
+                          setCustomColumns(c);
+                          setToastMessage(`Set PDF417 columns to ${c}`);
+                        }}
+                        className={`flex-1 py-1 rounded text-[9px] font-mono font-bold border transition ${
+                          customColumns === c
+                            ? 'bg-[#FF5C00] text-white border-[#FF5C00]'
+                            : 'bg-[#FAF7EC] text-[#0B2519]/70 border-[#0B2519]/15 hover:border-[#FF5C00]/40'
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+
+                  <p className="text-[9px] text-[#0B2519]/60 font-sans leading-tight">
+                    💡 22–26 columns yields the exact ultra-wide panoramic aspect ratio seen on physical driver license card backs.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="flex flex-col gap-2.5">
               <div className="flex items-center justify-between gap-3">
                 <label className="text-[10px] uppercase font-bold tracking-wider text-[#0B2519]/80 font-sans">
@@ -1691,8 +1837,16 @@ export default function App() {
                       referrerPolicy="no-referrer"
                     />
                   </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] bg-[#FFE6D5] text-[#FF5C00] font-bold px-2 py-0.5 rounded-full border border-[#FF5C00]/30 font-mono">
+                      {layoutMode === 'dense_wide' ? `Dense Wide (${customColumns} Columns)` : 'Standard Layout'}
+                    </span>
+                    <span className="text-[10px] text-[#0B2519]/60 font-mono font-medium">
+                      PDF417 • ECC-5 • {formData.ver ? `AAMVA v${formData.ver}` : 'AAMVA'}
+                    </span>
+                  </div>
                   <p className="text-[10px] text-[#0B2519]/60 font-mono text-center font-bold">
-                    💡 This standard high-resolution barcode contains all structured demographic fields configured under the AAMVA v09/v10 Specification.
+                    💡 This standard high-resolution barcode contains all structured demographic fields configured under the AAMVA Specification.
                   </p>
                 </div>
 

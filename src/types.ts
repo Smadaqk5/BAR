@@ -73,6 +73,8 @@ export interface Order {
   verification_note?: string;
 }
 
+export type BarcodeLayoutType = 'default' | 'card_stripe';
+
 export interface SavedClientProfile {
   id: string;
   title: string;
@@ -83,6 +85,8 @@ export interface SavedClientProfile {
   barcodeString?: string;
   imageUrl?: string;
   userId?: string;
+  barcodeType?: BarcodeLayoutType;
+  stripeColumns?: number;
 }
 
 export interface TokenPackage {
